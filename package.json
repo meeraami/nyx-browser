@@ -1,0 +1,50 @@
+{
+  "name": "sidebar-browser",
+  "productName": "Nyx",
+  "version": "2.0.0",
+  "description": "Nyx — a browser with a sidebar for WhatsApp, Instagram and any site",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.nyx.browser",
+    "productName": "Nyx",
+    "copyright": "Personal project",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "page-preload.js",
+      "ui.html",
+      "internal.html",
+      "icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nyx",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "uninstallDisplayName": "Nyx",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Nyx-Setup-${version}.exe"
+    }
+  }
+}
