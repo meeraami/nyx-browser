@@ -7,6 +7,9 @@ A lightweight Windows browser with an Edge-style sidebar, so WhatsApp, Instagram
 ## Why Nyx exists
 Microsoft Edge used to have a handy sidebar for keeping apps like WhatsApp open beside your tabs, and then removed it in an update. Nyx started as a replacement for that feature and grew into a full browser built around it.
 
+## The name
+Nyx is dedicated to my black cat, **Shadow** 🐈‍⬛. She isn't called Nyx, but Nyx, the Greek goddess of night, felt right for a little black cat. That's her on the icon.
+
 ## How it works
 Each sidebar site runs as a real browser page, not an iframe. Sites that block embedding, like WhatsApp Web and Instagram, work normally, and you stay logged in between restarts.
 
