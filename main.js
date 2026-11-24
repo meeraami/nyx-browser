@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS = {
   startup: 'restore',        // 'restore' | 'home'
   showBookmarksBar: true,
   askDownload: false,
-  downloadDir: '',           // '' = Windows Downloads folder
+  downloadDir: '',           // '' = system Downloads folder
 };
 
 const DEFAULT_SITES = [
@@ -207,6 +207,8 @@ function wire(wc) {
   wc.on('zoom-changed', (_e, dir) => zoomWc(wc, dir === 'in' ? 1 : -1));
 }
 
+const isMac = process.platform === 'darwin';
+
 function shortcut(input) {
   if (input.type !== 'keyDown') return false;
   const ctrl = input.control || input.meta;
@@ -221,6 +223,9 @@ function shortcut(input) {
   if (ctrl && k === 'w') { closeTab(activeTab); return true; }
   if (ctrl && k === 'l') { focusUrl(); return true; }
   if ((ctrl && k === 'r') || k === 'f5') { wc && wc.reload(); return true; }
+  if (isMac && input.meta && k === '[') { nav && nav.canGoBack() && nav.goBack(); return true; }
+  if (isMac && input.meta && k === ']') { nav && nav.canGoForward() && nav.goForward(); return true; }
+  if (isMac && input.meta && k === ',') { openInternal('settings'); return true; }
   if (input.alt && k === 'arrowleft') { nav && nav.canGoBack() && nav.goBack(); return true; }
   if (input.alt && k === 'arrowright') { nav && nav.canGoForward() && nav.goForward(); return true; }
   if (input.alt && k === 'home') { wc && wc.loadURL(settings.homePage); return true; }
@@ -637,7 +642,7 @@ ipcMain.on('menu:open', (_e, pos) => {
   const wc = activeWc();
   const url = wc ? wc.getURL() : '';
   const z = wc ? Math.round(wc.getZoomFactor() * 100) : 100;
-  const label = (text, accel, extra = {}) => ({ label: text, accelerator: accel, registerAccelerator: false, ...extra });
+  const label = (text, accel, extra = {}) => ({ label: text, accelerator: accel && accel.replace('Ctrl+', 'CommandOrControl+'), registerAccelerator: false, ...extra });
   Menu.buildFromTemplate([
     label('New tab', 'Ctrl+T', { click: () => { newTab(); focusUrl(); } }),
     label('Reopen closed tab', 'Ctrl+Shift+T', { enabled: closedTabs.length > 0, click: reopenTab }),
@@ -732,12 +737,13 @@ ipcMain.handle('nyx:do', async (e, action, data = {}) => {
 app.setPath('userData', process.env.SNAP_DIR
   ? path.join(process.env.SNAP_DIR, 'nyx-test-profile')
   : path.join(app.getPath('appData'), app.isPackaged ? 'Nyx' : 'Sidebar Browser'));
-app.setAppUserModelId('Nyx');
+if (process.platform === 'win32') app.setAppUserModelId('Nyx');
 
 app.whenReady().then(() => {
   ses = session.fromPartition(PARTITION);
   // Present as plain Chrome so sites (WhatsApp) don't reject us.
-  ses.setUserAgent(`Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`);
+  const osUA = process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7' : 'Windows NT 10.0; Win64; x64';
+  ses.setUserAgent(`Mozilla/5.0 (${osUA}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`);
   setupDownloads();
 
   settings = { ...DEFAULT_SETTINGS, ...readJSON('settings.json', {}) };
@@ -758,6 +764,14 @@ app.whenReady().then(() => {
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   win.setMenuBarVisibility(false);
+  if (isMac) {
+    // macOS needs an application menu for Cmd+C/V/X/A, Cmd+Q, Cmd+H and Cmd+M to work.
+    // Browser shortcuts are handled in shortcut(), so only roles are listed here.
+    Menu.setApplicationMenu(Menu.buildFromTemplate([
+      { role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' },
+    ]));
+    if (app.dock) app.dock.setIcon(path.join(__dirname, 'icon.png'));
+  }
   win.webContents.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault(); });
   win.on('resize', layout);
   win.on('focus', () => win.flashFrame(false));
@@ -770,4 +784,4 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', flushAll);
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => app.quit()); // simple: closing the window quits, on every OS

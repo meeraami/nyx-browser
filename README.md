@@ -2,7 +2,7 @@
 
 # Nyx
 
-A lightweight Windows browser with an Edge-style sidebar, so WhatsApp, Instagram or any other site stays open next to the page you're browsing.
+A lightweight Windows and macOS browser with an Edge-style sidebar, so WhatsApp, Instagram or any other site stays open next to the page you're browsing.
 
 ## Why Nyx exists
 Microsoft Edge used to have a handy sidebar for keeping apps like WhatsApp open beside your tabs, and then removed it in an update. Nyx started as a replacement for that feature and grew into a full browser built around it.
@@ -35,7 +35,14 @@ npm install
 npx electron .
 ```
 
-## Build the installer
+## Build for macOS
+```
+npm install
+npm run dist:mac
+```
+The `.dmg` is written to `dist/`. It isn't signed or notarized, so on first launch right-click the app and choose **Open**. Keyboard shortcuts use ⌘ instead of Ctrl on Mac.
+
+## Build the Windows installer
 Double-click `Build Installer.cmd`, or run `npx electron-builder --win nsis`. The installer is written to `dist/`.
 
 ## License
