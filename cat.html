@@ -52,6 +52,7 @@ function stepTheme(t) {
 }
 
 function tail(t, floor) {
+  const dm = 1;                                                                        // the tail looks the same on light and dark pages (this shadows the page's eased dark amount)
   const KS = DISPLAY_H / 150, N = 20, L = 5.2 * KS, wag = 1, wf = 1 - 0.1 * (1 - dm);
   let x = PAD_X + 84 * S, y = floor - 92 * S, a = Math.PI - 0.5;                     // starts behind the haunch, heading left and down to the floor
   const pts = [{ x, y }], widths = [15 * KS * wf];
