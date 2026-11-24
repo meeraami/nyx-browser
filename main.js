@@ -519,7 +519,7 @@ function reloadWebPages() {
 // Pages cover Nyx's own UI, so she lives in a transparent, click-through child window over the bottom-left of the main window.
 // She is there while the browser is in dark mode (a black cat of the night), bounds away when it goes light, and comes back for dark.
 let catWin = null, catState = 'none';                        // 'none' | 'in' | 'leaving'
-const CAT_W = 420, CAT_H = 320;
+const CAT_W = 560, CAT_H = 250;
 
 function catBounds() {
   const b = win.getContentBounds();
@@ -539,15 +539,18 @@ function syncCat() {
     });
     catWin.setIgnoreMouseEvents(true);
     catWin.once('ready-to-show', () => catWin && !catWin.isDestroyed() && catWin.showInactive());
-    catWin.loadFile('cat.html', { query: { scale: '0.6' } });
+    catWin.loadFile('cat.html');
   } else if (!catWanted() && catState === 'in' && catWin && !catWin.isDestroyed()) {
     catState = 'leaving';
-    catWin.webContents.executeJavaScript('window.catLeave && window.catLeave()').catch(() => {});
-    setTimeout(() => {
+    let finished = false;
+    const finish = () => {
+      if (finished) return; finished = true;
       if (catWin && !catWin.isDestroyed()) catWin.destroy();
       catWin = null; catState = 'none';
-      syncCat();                                             // she may be wanted again already (quick toggle)
-    }, 2100);
+      setTimeout(syncCat, 700);                              // she may be wanted again already (quick toggle); give the window a moment
+    };
+    catWin.webContents.executeJavaScript('window.catLeave ? window.catLeave() : null').then(finish, finish);   // resolves once she has walked off
+    setTimeout(finish, 12000);
   }
 }
 

@@ -2,20 +2,21 @@
 <meta charset="utf-8">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
-  #wrap { position: absolute; left: 0; bottom: 0; transform-origin: 50% 100%; will-change: transform; }
-  canvas { display: block; }
+  #stage { position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; overflow: hidden; }
+  canvas { position: absolute; bottom: 0; left: 0; display: block; will-change: transform, opacity; }
+  #c, #w { opacity: 0; }
 </style>
-<div id="wrap"><canvas id="c"></canvas></div>
+<div id="stage"><canvas id="c"></canvas><canvas id="w"></canvas></div>
 <script>
 // A black cat sitting front-on, drawn procedurally: shaded coat, thousands of fur strands, a ground shadow.
 // ?scale=<size>&life=<seconds visible>   (&freeze=<seconds> draws one still frame without fading, for testing)
 const q = new URLSearchParams(location.search);
-const SCALE = +q.get('scale') || 0.6;
+const SCALE = +q.get('scale') || 0.42;
 const freeze = q.has('freeze') ? +q.get('freeze') : null;
 const LW = 320, LH = 420;
 const dpr = window.devicePixelRatio || 1, K = SCALE * dpr;
 
-const cv = document.getElementById('c'), wrap = document.getElementById('wrap');
+const cv = document.getElementById('c');
 cv.width = Math.round(LW * K); cv.height = Math.round(LH * K);
 cv.style.width = LW * SCALE + 'px'; cv.style.height = LH * SCALE + 'px';
 const ctx = cv.getContext('2d');
@@ -232,57 +233,249 @@ function frame(t) {
   eye(ctx, 187, 101, true, open);
 }
 
-// ---------- movement: she bounds in from the left edge, sits, and bounds out again when told to leave ----------
-const REST = 22, CATW = LW * SCALE;                          // resting x (px from the left edge of the overlay)
-const ease = u => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
-let x = -CATW - 20, hopY = 0, sx = 1, sy = 1, tilt = 0;
+// ====================================================================================
+// Side-view walking cat (for arriving and leaving). Same fur/lighting style as the sitting cat.
+// ====================================================================================
+const SW = 1.1;                                              // on-screen scale of the walker
+const WTOP = 34;                                             // headroom for the raised tail
+const WLW = 340, WLH = 200 + WTOP, WG = 170;                        // logical canvas size and ground line
+const wv = document.getElementById('w');
+const WK = SW * dpr;
+wv.width = Math.round(WLW * WK); wv.height = Math.round(WLH * WK);
+wv.style.width = WLW * SW + 'px'; wv.style.height = WLH * SW + 'px';
+wv.style.bottom = -((WLH - WG - WTOP) * SW - 9) + 'px';      // her paws line up with where the sitting cat's shadow is
+const wctx = wv.getContext('2d');
 
-function place() {
-  wrap.style.transform = `translate(${x}px, ${-hopY}px) rotate(${tilt}deg) scale(${sx}, ${sy})`;
+const WL = { x: 235, y: 30 };                                // light for the walker (upper front)
+const wlit = (x, y) => Math.pow(clamp(1 - Math.hypot(x - WL.x, y - WL.y) / 260), 1.3);
+function wfur(c, path, box, count, angle, o) {
+  c.save(); c.clip(path); c.lineCap = 'round';
+  for (let i = 0; i < count; i++) {
+    const x = box[0] + rnd() * box[2], y = box[1] + rnd() * box[3];
+    const a = angle(x, y) + (rnd() - 0.5) * 0.3, len = o.len[0] + rnd() * (o.len[1] - o.len[0]);
+    const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len, l = wlit(x, y);
+    c.strokeStyle = rnd() < o.light * (0.3 + l) ? `rgba(${TINT},${(0.05 + rnd() * 0.15 * o.glint) * (0.3 + l * 1.5)})` : `rgba(0,0,0,${0.12 + rnd() * 0.28})`;
+    c.lineWidth = 0.45 + rnd() * 0.45;
+    c.beginPath(); c.moveTo(x, y); c.lineTo(ex, ey); c.stroke();
+  }
+  c.restore();
 }
-// a run of hops from x0 to x1; resolves when she has landed
-function bound(x0, x1, ms, hops, height, lean) {
+
+const wBody = P('M72,88 C70,70 90,61 120,60 C150,58 180,58 205,63 C222,66 230,80 227,93 C224,108 208,118 190,116 C170,111 150,114 130,112 C108,114 82,112 74,100 Z');
+const wNeck = P('M198,64 C214,56 228,50 240,48 L248,84 C238,92 228,98 218,102 L204,98 Z');
+const wHead = P('M228,68 C226,50 240,40 257,42 C273,44 283,56 283,66 C285,75 279,83 267,85 C254,89 236,86 228,68 Z');
+const wEarN = P('M238,50 C238,40 240,30 244,22 C250,28 256,34 258,43 Z');
+const wEarF = P('M254,43 C258,34 264,28 269,24 C270,32 271,40 270,49 Z');
+const wCache = document.createElement('canvas');
+wCache.width = wv.width; wCache.height = wv.height;
+
+function paintWalkStatic(c) {
+  c.setTransform(WK, 0, 0, WK, 0, WTOP * WK);
+  let g;
+  pool(c, 165, WG + 2, 140, 12, 0.5);                        // soft shadow along the ground
+  pool(c, 165, WG, 95, 5, 0.7);
+
+  // far ear
+  g = c.createLinearGradient(0, 24, 0, 50); g.addColorStop(0, '#15161b'); g.addColorStop(1, '#050506');
+  c.fillStyle = g; c.fill(wEarF);
+  // torso, neck
+  g = c.createLinearGradient(0, 58, 0, 118);
+  g.addColorStop(0, '#22232a'); g.addColorStop(0.3, '#0c0c0f'); g.addColorStop(1, '#030304');
+  c.fillStyle = g; c.fill(wBody); c.fill(wNeck);
+  const back = () => Math.atan2(0.28, -1);                   // fur lies back along the body
+  wfur(c, wBody, [66, 56, 166, 64], 2300, back, { len: [6, 11], light: 0.65, glint: 0.6 });
+  wfur(c, wNeck, [196, 46, 54, 60], 520, () => Math.atan2(0.9, -0.5), { len: [5, 9], light: 0.65, glint: 0.6 });
+  // belly shadow and a sheen along the spine
+  g = c.createLinearGradient(0, 96, 0, 118); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.6)');
+  c.save(); c.clip(wBody); c.fillStyle = g; c.fillRect(60, 90, 180, 34); c.restore();
+  g = c.createLinearGradient(80, 0, 215, 0);
+  g.addColorStop(0, 'rgba(160,168,190,0)'); g.addColorStop(0.6, 'rgba(160,168,190,0.25)'); g.addColorStop(1, 'rgba(160,168,190,0.05)');
+  c.strokeStyle = g; c.lineWidth = 2; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(88, 66); c.bezierCurveTo(120, 62, 170, 60, 204, 66); c.stroke();
+
+  // head
+  g = c.createRadialGradient(250, 52, 3, 258, 66, 36);
+  g.addColorStop(0, '#26272e'); g.addColorStop(0.55, '#0d0d10'); g.addColorStop(1, '#040405');
+  c.fillStyle = g; c.fill(wHead);
+  wfur(c, wHead, [226, 40, 60, 50], 700, () => Math.atan2(0.5, -1), { len: [4, 8], light: 0.7, glint: 0.8 });
+  // near ear
+  g = c.createLinearGradient(236, 22, 252, 50); g.addColorStop(0, '#24252c'); g.addColorStop(1, '#070708');
+  c.fillStyle = g; c.fill(wEarN);
+  c.fillStyle = '#2a1a1f'; c.beginPath(); c.moveTo(241, 46); c.lineTo(245, 30); c.lineTo(254, 43); c.closePath(); c.fill();
+  // rim light along the top of the head, ears and back
+  g = c.createLinearGradient(80, 20, 290, 70);
+  g.addColorStop(0, 'rgba(170,180,205,0.08)'); g.addColorStop(0.7, 'rgba(170,180,205,0.5)'); g.addColorStop(1, 'rgba(170,180,205,0.35)');
+  c.strokeStyle = g; c.lineWidth = 1.3; c.lineJoin = 'round';
+  c.stroke(wEarN); c.stroke(wBody);
+
+  // eyes (a three-quarter profile: near eye full, far eye narrower), nose, mouth, whiskers
+  const wEye = (cx, cy, w, h) => {
+    c.save(); c.translate(cx, cy);
+    c.shadowColor = 'rgba(190,220,90,0.4)'; c.shadowBlur = 6;
+    const alm = () => { c.beginPath(); c.moveTo(-w, 1.4); c.quadraticCurveTo(0, -h * 1.5, w, -0.8); c.quadraticCurveTo(0, h * 1.2, -w, 1.4); c.closePath(); };
+    c.fillStyle = '#000'; alm(); c.fill(); c.shadowBlur = 0; c.save(); alm(); c.clip();
+    const ig = c.createRadialGradient(0, 0, 0.5, 0, 0, w * 1.1);
+    ig.addColorStop(0, '#eaf8a6'); ig.addColorStop(0.5, '#b4dc50'); ig.addColorStop(0.9, '#5f9c2a'); ig.addColorStop(1, '#2c5412');
+    c.fillStyle = ig; c.fillRect(-w, -h * 2, w * 2, h * 4);
+    const lg = c.createLinearGradient(0, -h, 0, h * 0.5); lg.addColorStop(0, 'rgba(0,0,0,0.7)'); lg.addColorStop(0.5, 'rgba(0,0,0,0)');
+    c.fillStyle = lg; c.fillRect(-w, -h * 2, w * 2, h * 3);
+    c.fillStyle = '#050703'; c.beginPath(); c.ellipse(0.3, 0, w * 0.2, h * 1.05, 0, 0, Math.PI * 2); c.fill();
+    c.restore(); c.strokeStyle = 'rgba(0,0,0,0.95)'; c.lineWidth = 1.2; alm(); c.stroke();
+    c.fillStyle = 'rgba(255,255,255,0.9)'; c.beginPath(); c.ellipse(-w * 0.35, -h * 0.4, w * 0.18, h * 0.22, -0.5, 0, Math.PI * 2); c.fill();
+    c.restore();
+  };
+  wEye(266, 57, 6.6, 4.2); wEye(277, 57, 4.2, 3.6);
+  c.fillStyle = '#3d2f35'; c.beginPath(); c.moveTo(280, 64); c.lineTo(285, 66); c.lineTo(282, 70); c.closePath(); c.fill();
+  c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 0.9; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(282, 70); c.quadraticCurveTo(279, 76, 272, 76); c.stroke();
+  c.lineWidth = 0.6;
+  for (const [dy, ex, ey] of [[0, 308, 60], [3, 311, 68], [6, 306, 77]]) {
+    const wg = c.createLinearGradient(277, 70 + dy, ex, ey); wg.addColorStop(0, 'rgba(225,228,238,0.5)'); wg.addColorStop(1, 'rgba(225,228,238,0.03)');
+    c.strokeStyle = wg; c.beginPath(); c.moveTo(277, 70 + dy); c.quadraticCurveTo((277 + ex) / 2, (70 + ey) / 2 - 6, ex, ey); c.stroke();
+  }
+}
+paintWalkStatic(wCache.getContext('2d'));
+
+// ---- gait: leg phase follows distance travelled, so paws never slide on the ground ----
+const STRIDE = 19, DUTY = 0.62, CYCLE = 2 * STRIDE / DUTY;
+const GPH = { nearHind: 0, nearFront: 0.25, farHind: 0.5, farFront: 0.75 };
+function wfoot(hipX, phase, d) {
+  const p = (((d / CYCLE) + phase) % 1 + 1) % 1;
+  if (p < DUTY) return { x: hipX + STRIDE - (p / DUTY) * 2 * STRIDE, y: WG };
+  const u = (p - DUTY) / (1 - DUTY);
+  return { x: hipX - STRIDE + 2 * STRIDE * u, y: WG - 12 * Math.sin(Math.PI * u) };
+}
+function ik(ax, ay, tx, ty, l1, l2, dir) {
+  let d = Math.hypot(tx - ax, ty - ay); d = Math.min(d, l1 + l2 - 0.01);
+  const base = Math.atan2(ty - ay, tx - ax);
+  const a = Math.acos(clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1));
+  const ang = base + dir * a;
+  return { x: ax + Math.cos(ang) * l1, y: ay + Math.sin(ang) * l1 };
+}
+const W_RIM = 'rgba(120,125,140,0.5)';
+function wlimb(c, pts, widths, col) {
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  for (const [stroke, extra] of [[W_RIM, 1.5], [col, 0]]) {
+    c.strokeStyle = stroke;
+    for (let i = 0; i < pts.length - 1; i++) { c.lineWidth = widths[i] + extra; c.beginPath(); c.moveTo(pts[i].x, pts[i].y); c.lineTo(pts[i + 1].x, pts[i + 1].y); c.stroke(); }
+  }
+}
+function wpaw(c, f, col) { c.fillStyle = col; c.beginPath(); c.ellipse(f.x + 3, f.y - 2.5, 7, 4, 0, 0, Math.PI * 2); c.fill(); }
+function wFront(c, phase, d, col, near) {
+  const sh = { x: 198 - (near ? 0 : 6), y: 98 }, f = wfoot(sh.x + 8, phase, d), wrist = { x: f.x - 1, y: f.y - 11 };
+  wlimb(c, [sh, ik(sh.x, sh.y, wrist.x, wrist.y, 32, 28, +1), wrist, { x: f.x, y: f.y - 3 }], [13, 8, 6], col); wpaw(c, f, col);
+}
+function wHind(c, phase, d, col, near) {
+  const hp = { x: 100 + (near ? 0 : 6), y: 96 }, f = wfoot(hp.x - 4, phase, d), hock = { x: f.x - 5, y: f.y - 17 };
+  wlimb(c, [hp, ik(hp.x, hp.y, hock.x, hock.y, 33, 29, -1), hock, { x: f.x, y: f.y - 3 }], [16, 9, 6, 6], col); wpaw(c, f, col);
+}
+function wTail(c, t, bob, wag) {
+  const N = 13, L = 7;
+  let x = 76, y = 84 + bob, a = -Math.PI / 2 - 0.55 + Math.sin(t * 4.2) * 0.1 * wag;   // up and slightly back, swaying
+  const pts = [{ x, y }];
+  for (let i = 0; i < N; i++) {
+    a += 0.1 + Math.sin(t * 4.2 - i * 0.5) * 0.085 * wag * (0.3 + i / N);
+    x += Math.cos(a) * L; y += Math.sin(a) * L; pts.push({ x, y });
+  }
+  wlimb(c, pts, pts.slice(1).map((_, i) => 8.5 - (i / N) * 3.6), '#060608');
+}
+function muscle(c, cx, cy, rx, ry, rot) {
+  const g = c.createRadialGradient(cx - 3, cy - 5, 1, cx, cy, Math.max(rx, ry)); g.addColorStop(0, '#131316'); g.addColorStop(1, '#060607');
+  c.globalAlpha = 0.55; c.fillStyle = g; c.beginPath(); c.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2); c.fill(); c.globalAlpha = 1;
+}
+
+function drawWalker(t, d, walking) {
+  const c = wctx;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, wv.width, wv.height);
+  const bob = walking ? Math.cos(d / CYCLE * Math.PI * 4) * 1.1 : 0;
+  c.setTransform(WK, 0, 0, WK, 0, WTOP * WK);
+  wFront(c, GPH.farFront, d, '#0d0d10', false);
+  wHind(c, GPH.farHind, d, '#0d0d10', false);
+  wTail(c, t, bob, 1);
+  c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(wCache, 0, bob * WK);   // torso, neck and head (bobbing)
+  c.setTransform(WK, 0, 0, WK, 0, WTOP * WK);
+  muscle(c, 100, 96 + bob, 17, 22, 0.3); muscle(c, 196, 96 + bob, 12, 18, -0.15);
+  wFront(c, GPH.nearFront, d, '#060608', true);
+  wHind(c, GPH.nearHind, d, '#060608', true);
+}
+
+// ====================================================================================
+// Choreography: she walks in, sits down; when told to leave she stands, turns and walks away.
+// ====================================================================================
+const REST = 22;
+const SITW = LW * SCALE, WALKW = WLW * SW;
+const sitCx = REST + SITW / 2;                               // x of her centre while sitting
+const smooth = u => u * u * (3 - 2 * u);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+cv.style.left = REST + 'px';
+
+let walker = { x: -WALKW, dir: 1, d: 0, t: 0, walking: false, alpha: 0 };   // x = centre
+let sitAlpha = 0, sitStretch = 1, now_t = 0;
+
+function applyWalker() {
+  wv.style.opacity = walker.alpha;
+  wv.style.transform = `translateX(${walker.x - WALKW / 2}px) scaleX(${walker.dir})`;
+}
+function applySit() { cv.style.opacity = sitAlpha; cv.style.transformOrigin = '50% 100%'; cv.style.transform = `scale(${1 / sitStretch}, ${sitStretch})`; }
+
+// walk from x0 to x1 at `speed` px/s, easing in and/or out; resolves on arrival
+function walkTo(x1, speed, easeIn, easeOut) {
+  return new Promise(res => {
+    const x0 = walker.x, dist = Math.abs(x1 - x0), sign = Math.sign(x1 - x0) || 1;
+    walker.dir = sign; walker.walking = true;
+    let last = performance.now(), covered = 0;
+    (function step(now) {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      const left = dist - covered;
+      let v = speed;
+      if (easeIn) v *= clamp(covered / 70 + 0.15);            // start slowly, as she gets going
+      if (easeOut) v *= clamp(left / 90 + 0.06);              // slow down as she arrives
+      const dx = Math.min(left, v * dt);
+      covered += dx; walker.x = x0 + sign * covered; walker.d += dx / SW;
+      applyWalker();
+      if (covered < dist - 0.01) requestAnimationFrame(step); else { walker.walking = false; res(); }
+    })(last);
+  });
+}
+function fade(setter, from, to, ms) {
   return new Promise(res => {
     const t0 = performance.now();
     (function step(now) {
-      const u = clamp((now - t0) / ms);
-      x = x0 + (x1 - x0) * ease(u);
-      const ph = (u * hops) % 1;                             // 0..1 within the current hop
-      hopY = Math.sin(Math.PI * ph) * height * (u >= 1 ? 0 : 1);
-      const air = Math.sin(Math.PI * ph);
-      sy = u >= 1 ? 1 : 1 + air * 0.07 - (1 - air) * 0.05;   // stretch in the air, squash on landing
-      sx = u >= 1 ? 1 : 1 - air * 0.04 + (1 - air) * 0.04;
-      tilt = u >= 1 ? 0 : Math.sign(x1 - x0) * lean * air;
-      place();
-      if (u < 1) requestAnimationFrame(step); else { hopY = 0; sx = sy = 1; tilt = 0; place(); res(); }
+      const u = clamp((now - t0) / ms); setter(from + (to - from) * smooth(u));
+      if (u < 1) requestAnimationFrame(step); else res();
     })(t0);
   });
 }
-const settle = () => new Promise(res => {                    // a little squash when she plops down
-  const t0 = performance.now();
-  (function step(now) {
-    const u = clamp((now - t0) / 380);
-    sy = 1 - 0.06 * Math.sin(Math.PI * u); sx = 1 + 0.035 * Math.sin(Math.PI * u); place();
-    if (u < 1) requestAnimationFrame(step); else { sx = sy = 1; place(); res(); }
-  })(t0);
-});
-const crouch = () => new Promise(res => {                    // gathers herself before leaving
-  const t0 = performance.now();
-  (function step(now) {
-    const u = clamp((now - t0) / 320);
-    sy = 1 - 0.1 * Math.sin(Math.PI * u); sx = 1 + 0.05 * Math.sin(Math.PI * u); place();
-    if (u < 1) requestAnimationFrame(step); else { sx = sy = 1; place(); res(); }
-  })(t0);
-});
 
-window.catEnter = async () => { await bound(-CATW - 20, REST, 1500, 3, 46, 5); await settle(); };
-window.catLeave = async () => { await crouch(); await bound(REST, -CATW - 30, 1300, 3, 52, 6); };
+window.catEnter = async () => {
+  walker.x = -WALKW / 2 - 10; walker.alpha = 1; walker.dir = 1; walker.d = 0; applyWalker();
+  await walkTo(sitCx, 95, false, true);                       // walks in from the left and slows to a stop
+  await Promise.all([fade(a => { walker.alpha = a; applyWalker(); }, 1, 0, 450), fade(a => { sitAlpha = a; applySit(); }, 0, 1, 450)]);
+  await fade(u => { sitStretch = 1 - 0.05 * Math.sin(Math.PI * u); applySit(); }, 0, 1, 380);   // settles down
+  sitStretch = 1; applySit();
+};
+window.catLeave = async () => {
+  walker.x = sitCx; walker.dir = -1; walker.d = 0; walker.walking = false; applyWalker();
+  await fade(u => { sitStretch = 1 + 0.05 * u; applySit(); }, 0, 1, 260);                       // rises
+  await Promise.all([fade(a => { sitAlpha = a; applySit(); }, 1, 0, 380), fade(a => { walker.alpha = a; applyWalker(); }, 0, 1, 380)]);
+  sitStretch = 1;
+  await walkTo(-WALKW / 2 - 20, 100, true, false);            // turns away and walks off, tail swaying
+  walker.alpha = 0; applyWalker();
+};
 
-if (freeze !== null) { x = REST; place(); frame(freeze); }
-else {
-  place();
-  const t0 = performance.now();
-  (function loop(now) { frame((now - t0) / 1000); requestAnimationFrame(loop); })(t0);
+// ---------- main loop ----------
+function loop(now) {
+  const t = (now - t0) / 1000; now_t = t;
+  if (walker.alpha > 0.001) drawWalker(t, walker.d, walker.walking);
+  if (sitAlpha > 0.001) frame(t);
+  requestAnimationFrame(loop);
+}
+const t0 = performance.now();
+if (freeze !== null) {
+  if (q.get('pose') === 'walk') { walker.x = 200; walker.dir = 1; walker.alpha = 1; walker.d = freeze * 40; walker.walking = true; applyWalker(); drawWalker(freeze, walker.d, true); }
+  else { sitAlpha = 1; applySit(); frame(freeze); }
+} else {
+  requestAnimationFrame(loop);
   window.catEnter();
 }
 </script>
