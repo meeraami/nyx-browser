@@ -261,54 +261,64 @@ function wfur(c, path, box, count, angle, o) {
   c.restore();
 }
 
-const wBody = P('M72,88 C70,70 90,61 120,60 C150,58 180,58 205,63 C222,66 230,80 227,93 C224,108 208,118 190,116 C170,111 150,114 130,112 C108,114 82,112 74,100 Z');
-const wNeck = P('M198,64 C214,56 228,50 240,48 L248,84 C238,92 228,98 218,102 L204,98 Z');
-const wHead = P('M228,68 C226,50 240,40 257,42 C273,44 283,56 283,66 C285,75 279,83 267,85 C254,89 236,86 228,68 Z');
-const wEarN = P('M238,50 C238,40 240,30 244,22 C250,28 256,34 258,43 Z');
-const wEarF = P('M254,43 C258,34 264,28 269,24 C270,32 271,40 270,49 Z');
+// ---- silhouette pieces (facing right, ground at y=170) ----
+const wBody = P('M66,92 C62,76 72,64 92,60 C108,56 124,63 140,65 C158,67 176,58 196,56 C214,56 226,64 230,78 C232,94 224,108 208,114 C190,118 172,112 156,112 C140,112 126,108 112,110 C94,112 70,108 66,92 Z');
+const wThigh = P('M72,84 C74,66 98,64 112,78 C122,94 118,116 104,122 C88,126 72,112 72,84 Z');       // haunch, part of the silhouette
+const wShoulder = P('M184,70 C196,60 216,64 222,82 C226,98 218,112 204,114 C190,112 180,92 184,70 Z');
+const wNeck = P('M194,56 C214,48 232,38 248,34 L262,74 C248,86 234,96 222,102 L206,94 Z');
+const wHead = P('M240,62 C238,44 250,32 266,32 C277,32 285,40 290,52 C294,58 295,64 291,68 C287,74 281,76 275,76 C267,85 250,85 244,76 C240,72 240,66 240,62 Z');
+const wEarN = P('M246,40 C244,28 246,18 252,9 C260,15 267,24 269,36 Z');
+const wEarF = P('M264,35 C268,24 272,16 278,11 C282,21 283,32 282,43 Z');
 const wCache = document.createElement('canvas');
 wCache.width = wv.width; wCache.height = wv.height;
 
 function paintWalkStatic(c) {
   c.setTransform(WK, 0, 0, WK, 0, WTOP * WK);
   let g;
-  pool(c, 165, WG + 2, 140, 12, 0.5);                        // soft shadow along the ground
+  pool(c, 165, WG + 2, 140, 12, 0.5);
   pool(c, 165, WG, 95, 5, 0.7);
 
-  // far ear
-  g = c.createLinearGradient(0, 24, 0, 50); g.addColorStop(0, '#15161b'); g.addColorStop(1, '#050506');
-  c.fillStyle = g; c.fill(wEarF);
-  // torso, neck
-  g = c.createLinearGradient(0, 58, 0, 118);
-  g.addColorStop(0, '#22232a'); g.addColorStop(0.3, '#0c0c0f'); g.addColorStop(1, '#030304');
+  g = c.createLinearGradient(0, 14, 0, 46); g.addColorStop(0, '#15161b'); g.addColorStop(1, '#050506');
+  c.fillStyle = g; c.fill(wEarF);                                                   // far ear
+  // body: volume from a top-to-bottom gradient, plus the haunch and shoulder muscles
+  g = c.createLinearGradient(0, 56, 0, 120);
+  g.addColorStop(0, '#24252c'); g.addColorStop(0.3, '#0d0d10'); g.addColorStop(1, '#030304');
   c.fillStyle = g; c.fill(wBody); c.fill(wNeck);
-  const back = () => Math.atan2(0.28, -1);                   // fur lies back along the body
-  wfur(c, wBody, [66, 56, 166, 64], 2300, back, { len: [6, 11], light: 0.65, glint: 0.6 });
-  wfur(c, wNeck, [196, 46, 54, 60], 520, () => Math.atan2(0.9, -0.5), { len: [5, 9], light: 0.65, glint: 0.6 });
-  // belly shadow and a sheen along the spine
-  g = c.createLinearGradient(0, 96, 0, 118); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.6)');
-  c.save(); c.clip(wBody); c.fillStyle = g; c.fillRect(60, 90, 180, 34); c.restore();
-  g = c.createLinearGradient(80, 0, 215, 0);
-  g.addColorStop(0, 'rgba(160,168,190,0)'); g.addColorStop(0.6, 'rgba(160,168,190,0.25)'); g.addColorStop(1, 'rgba(160,168,190,0.05)');
+  for (const [path, cx, cy, r] of [[wThigh, 96, 94, 34], [wShoulder, 204, 88, 30]]) {
+    g = c.createRadialGradient(cx - 8, cy - 14, 2, cx, cy, r);
+    g.addColorStop(0, '#1b1c22'); g.addColorStop(0.7, '#0a0a0d'); g.addColorStop(1, '#040405');
+    c.fillStyle = g; c.fill(path);
+  }
+  const back = () => Math.atan2(0.3, -1);                                           // fur lies back along the body
+  wfur(c, wBody, [60, 54, 176, 66], 2600, back, { len: [6, 11], light: 0.65, glint: 0.6 });
+  wfur(c, wThigh, [70, 64, 54, 64], 700, () => Math.atan2(0.9, -0.4), { len: [5, 9], light: 0.7, glint: 0.7 });
+  wfur(c, wShoulder, [180, 60, 46, 56], 520, () => Math.atan2(0.9, -0.3), { len: [5, 9], light: 0.7, glint: 0.7 });
+  wfur(c, wNeck, [192, 32, 72, 72], 640, () => Math.atan2(0.8, -0.6), { len: [5, 9], light: 0.65, glint: 0.6 });
+  g = c.createLinearGradient(0, 98, 0, 120); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.55)');
+  c.save(); c.clip(wBody); c.fillStyle = g; c.fillRect(56, 96, 190, 28); c.restore();   // shadowed belly
+  g = c.createLinearGradient(70, 0, 220, 0);                                        // sheen along the spine
+  g.addColorStop(0, 'rgba(160,168,190,0)'); g.addColorStop(0.6, 'rgba(160,168,190,0.28)'); g.addColorStop(1, 'rgba(160,168,190,0.05)');
   c.strokeStyle = g; c.lineWidth = 2; c.lineCap = 'round';
-  c.beginPath(); c.moveTo(88, 66); c.bezierCurveTo(120, 62, 170, 60, 204, 66); c.stroke();
+  c.beginPath(); c.moveTo(80, 63); c.bezierCurveTo(110, 58, 130, 66, 150, 67); c.bezierCurveTo(170, 66, 184, 59, 205, 58); c.stroke();
 
   // head
-  g = c.createRadialGradient(250, 52, 3, 258, 66, 36);
-  g.addColorStop(0, '#26272e'); g.addColorStop(0.55, '#0d0d10'); g.addColorStop(1, '#040405');
+  g = c.createRadialGradient(258, 44, 3, 266, 60, 40);
+  g.addColorStop(0, '#2a2b32'); g.addColorStop(0.55, '#0e0e11'); g.addColorStop(1, '#040405');
   c.fillStyle = g; c.fill(wHead);
-  wfur(c, wHead, [226, 40, 60, 50], 700, () => Math.atan2(0.5, -1), { len: [4, 8], light: 0.7, glint: 0.8 });
-  // near ear
-  g = c.createLinearGradient(236, 22, 252, 50); g.addColorStop(0, '#24252c'); g.addColorStop(1, '#070708');
+  wfur(c, wHead, [238, 30, 58, 56], 900, () => Math.atan2(0.45, -1), { len: [4, 8], light: 0.7, glint: 0.8 });
+  g = c.createLinearGradient(242, 12, 262, 42); g.addColorStop(0, '#2a2b32'); g.addColorStop(1, '#070708');
   c.fillStyle = g; c.fill(wEarN);
-  c.fillStyle = '#2a1a1f'; c.beginPath(); c.moveTo(241, 46); c.lineTo(245, 30); c.lineTo(254, 43); c.closePath(); c.fill();
-  // rim light along the top of the head, ears and back
-  g = c.createLinearGradient(80, 20, 290, 70);
-  g.addColorStop(0, 'rgba(170,180,205,0.08)'); g.addColorStop(0.7, 'rgba(170,180,205,0.5)'); g.addColorStop(1, 'rgba(170,180,205,0.35)');
+  g = c.createLinearGradient(0, 14, 0, 40); g.addColorStop(0, '#34222a'); g.addColorStop(1, '#0c0608');
+  c.fillStyle = g; c.beginPath(); c.moveTo(249, 38); c.bezierCurveTo(248, 29, 250, 22, 254, 16); c.bezierCurveTo(259, 21, 263, 28, 264, 36); c.closePath(); c.fill();
+  wfur(c, wEarN, [244, 8, 26, 32], 60, () => -Math.PI / 2 + 0.3, { len: [4, 7], light: 0.5, glint: 0.8 });
+  // rim light along head, ear and back
+  g = c.createLinearGradient(70, 20, 300, 60);
+  g.addColorStop(0, 'rgba(170,180,205,0.05)'); g.addColorStop(0.7, 'rgba(170,180,205,0.5)'); g.addColorStop(1, 'rgba(170,180,205,0.4)');
   c.strokeStyle = g; c.lineWidth = 1.3; c.lineJoin = 'round';
-  c.stroke(wEarN); c.stroke(wBody);
+  c.stroke(wEarN);
+  // rim light on the back only (a clipped band along the top of the body), so no rings appear around the shoulder or head
+  c.save(); c.clip(wBody); c.lineWidth = 3; c.stroke(wBody); c.restore();
 
-  // eyes (a three-quarter profile: near eye full, far eye narrower), nose, mouth, whiskers
   const wEye = (cx, cy, w, h) => {
     c.save(); c.translate(cx, cy);
     c.shadowColor = 'rgba(190,220,90,0.4)'; c.shadowBlur = 6;
@@ -324,14 +334,14 @@ function paintWalkStatic(c) {
     c.fillStyle = 'rgba(255,255,255,0.9)'; c.beginPath(); c.ellipse(-w * 0.35, -h * 0.4, w * 0.18, h * 0.22, -0.5, 0, Math.PI * 2); c.fill();
     c.restore();
   };
-  wEye(266, 57, 6.6, 4.2); wEye(277, 57, 4.2, 3.6);
-  c.fillStyle = '#3d2f35'; c.beginPath(); c.moveTo(280, 64); c.lineTo(285, 66); c.lineTo(282, 70); c.closePath(); c.fill();
+  wEye(272, 49, 7.2, 4.6); wEye(284, 50, 4.4, 3.8);
+  c.fillStyle = '#3d2f35'; c.beginPath(); c.moveTo(288, 58); c.lineTo(294, 61); c.lineTo(290, 66); c.closePath(); c.fill();
   c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 0.9; c.lineCap = 'round';
-  c.beginPath(); c.moveTo(282, 70); c.quadraticCurveTo(279, 76, 272, 76); c.stroke();
+  c.beginPath(); c.moveTo(290, 66); c.quadraticCurveTo(288, 73, 279, 73); c.stroke();
   c.lineWidth = 0.6;
-  for (const [dy, ex, ey] of [[0, 308, 60], [3, 311, 68], [6, 306, 77]]) {
-    const wg = c.createLinearGradient(277, 70 + dy, ex, ey); wg.addColorStop(0, 'rgba(225,228,238,0.5)'); wg.addColorStop(1, 'rgba(225,228,238,0.03)');
-    c.strokeStyle = wg; c.beginPath(); c.moveTo(277, 70 + dy); c.quadraticCurveTo((277 + ex) / 2, (70 + ey) / 2 - 6, ex, ey); c.stroke();
+  for (const [dy, ex, ey] of [[-1, 318, 56], [3, 322, 66], [7, 316, 77]]) {
+    const wg = c.createLinearGradient(286, 66 + dy, ex, ey); wg.addColorStop(0, 'rgba(225,228,238,0.5)'); wg.addColorStop(1, 'rgba(225,228,238,0.03)');
+    c.strokeStyle = wg; c.beginPath(); c.moveTo(286, 66 + dy); c.quadraticCurveTo((286 + ex) / 2, (66 + ey) / 2 - 6, ex, ey); c.stroke();
   }
 }
 paintWalkStatic(wCache.getContext('2d'));
@@ -343,7 +353,7 @@ function wfoot(hipX, phase, d) {
   const p = (((d / CYCLE) + phase) % 1 + 1) % 1;
   if (p < DUTY) return { x: hipX + STRIDE - (p / DUTY) * 2 * STRIDE, y: WG };
   const u = (p - DUTY) / (1 - DUTY);
-  return { x: hipX - STRIDE + 2 * STRIDE * u, y: WG - 12 * Math.sin(Math.PI * u) };
+  return { x: hipX - STRIDE + 2 * STRIDE * u, y: WG - 13 * Math.sin(Math.PI * u) };
 }
 function ik(ax, ay, tx, ty, l1, l2, dir) {
   let d = Math.hypot(tx - ax, ty - ay); d = Math.min(d, l1 + l2 - 0.01);
@@ -352,36 +362,66 @@ function ik(ax, ay, tx, ty, l1, l2, dir) {
   const ang = base + dir * a;
   return { x: ax + Math.cos(ang) * l1, y: ay + Math.sin(ang) * l1 };
 }
-const W_RIM = 'rgba(120,125,140,0.5)';
-function wlimb(c, pts, widths, col) {
-  c.lineCap = 'round'; c.lineJoin = 'round';
-  for (const [stroke, extra] of [[W_RIM, 1.5], [col, 0]]) {
-    c.strokeStyle = stroke;
-    for (let i = 0; i < pts.length - 1; i++) { c.lineWidth = widths[i] + extra; c.beginPath(); c.moveTo(pts[i].x, pts[i].y); c.lineTo(pts[i + 1].x, pts[i + 1].y); c.stroke(); }
+
+// A tapered, organic limb: an outline built around a chain of joints with a width at each, filled and furred.
+const strandSeeds = {};
+function seedsFor(name, n) { return strandSeeds[name] || (strandSeeds[name] = Array.from({ length: n }, () => [rnd(), rnd() * 2 - 1, 4 + rnd() * 5, rnd()])); }
+function organicLimb(c, name, pts, widths, base, rim) {
+  const n = pts.length, L = [], R = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[Math.min(n - 1, i + 1)];
+    let dx = p1.x - p0.x, dy = p1.y - p0.y; const m = Math.hypot(dx, dy) || 1; dx /= m; dy /= m;
+    L.push({ x: pts[i].x - dy * widths[i] / 2, y: pts[i].y + dx * widths[i] / 2 });
+    R.push({ x: pts[i].x + dy * widths[i] / 2, y: pts[i].y - dx * widths[i] / 2 });
   }
+  const last = pts[n - 1], pr = pts[n - 2]; let ex = last.x - pr.x, ey = last.y - pr.y; const em = Math.hypot(ex, ey) || 1;
+  const cap = { x: last.x + ex / em * widths[n - 1] * 0.45, y: last.y + ey / em * widths[n - 1] * 0.45 };
+  const ring = [...L, cap, ...R.reverse()];
+  c.beginPath(); c.moveTo((ring[0].x + ring[1].x) / 2, (ring[0].y + ring[1].y) / 2);
+  for (let i = 1; i < ring.length; i++) { const a = ring[i], b = ring[(i + 1) % ring.length]; c.quadraticCurveTo(a.x, a.y, (a.x + b.x) / 2, (a.y + b.y) / 2); }
+  c.closePath();
+  c.fillStyle = base; c.fill();
+  c.lineWidth = 1.1; c.lineJoin = 'round'; c.strokeStyle = rim; c.stroke();
+  // fur strands, running along the limb towards the paw
+  c.save(); c.clip(); c.lineCap = 'round';
+  for (const [u, side, len, r] of seedsFor(name, 46)) {
+    const f = u * (n - 1), i = Math.min(n - 2, Math.floor(f)), t = f - i;
+    const x = pts[i].x + (pts[i + 1].x - pts[i].x) * t, y = pts[i].y + (pts[i + 1].y - pts[i].y) * t;
+    const w = (widths[i] + (widths[i + 1] - widths[i]) * t) / 2;
+    const ang = Math.atan2(pts[i + 1].y - pts[i].y, pts[i + 1].x - pts[i].x), l = wlit(x, y);
+    const sx = x - Math.sin(ang) * side * w, sy = y + Math.cos(ang) * side * w;
+    c.strokeStyle = r < 0.5 * (0.4 + l) ? `rgba(${TINT},${0.07 + r * 0.2 * (0.3 + l)})` : 'rgba(0,0,0,0.3)';
+    c.lineWidth = 0.55; c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx + Math.cos(ang) * len, sy + Math.sin(ang) * len); c.stroke();
+  }
+  c.restore();
 }
-function wpaw(c, f, col) { c.fillStyle = col; c.beginPath(); c.ellipse(f.x + 3, f.y - 2.5, 7, 4, 0, 0, Math.PI * 2); c.fill(); }
-function wFront(c, phase, d, col, near) {
-  const sh = { x: 198 - (near ? 0 : 6), y: 98 }, f = wfoot(sh.x + 8, phase, d), wrist = { x: f.x - 1, y: f.y - 11 };
-  wlimb(c, [sh, ik(sh.x, sh.y, wrist.x, wrist.y, 32, 28, +1), wrist, { x: f.x, y: f.y - 3 }], [13, 8, 6], col); wpaw(c, f, col);
+function wpaw(c, f, col, rim) {                                  // a rounded paw with a hint of toes
+  c.fillStyle = col; c.strokeStyle = rim; c.lineWidth = 1;
+  c.beginPath(); c.ellipse(f.x + 4, f.y - 3.4, 9.5, 4.6, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+  c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 0.8;
+  for (const dx of [6, 9.5]) { c.beginPath(); c.moveTo(f.x + dx, f.y - 6); c.lineTo(f.x + dx + 1, f.y - 1.8); c.stroke(); }
 }
-function wHind(c, phase, d, col, near) {
-  const hp = { x: 100 + (near ? 0 : 6), y: 96 }, f = wfoot(hp.x - 4, phase, d), hock = { x: f.x - 5, y: f.y - 17 };
-  wlimb(c, [hp, ik(hp.x, hp.y, hock.x, hock.y, 33, 29, -1), hock, { x: f.x, y: f.y - 3 }], [16, 9, 6, 6], col); wpaw(c, f, col);
+function wFront(c, name, phase, d, near) {
+  const col = near ? '#070709' : '#0d0d10', rim = near ? 'rgba(120,128,148,0.5)' : 'rgba(90,96,112,0.35)';
+  const sh = { x: 200 - (near ? 0 : 7), y: 90 }, f = wfoot(sh.x + 8, phase, d), wrist = { x: f.x - 1, y: f.y - 13 };
+  const elbow = ik(sh.x, sh.y, wrist.x, wrist.y, 35, 33, +1);
+  organicLimb(c, name, [sh, elbow, wrist, { x: f.x + 1, y: f.y - 5 }], [20, 11, 7.5, 7], col, rim); wpaw(c, f, col, rim);
+}
+function wHind(c, name, phase, d, near) {
+  const col = near ? '#070709' : '#0d0d10', rim = near ? 'rgba(120,128,148,0.5)' : 'rgba(90,96,112,0.35)';
+  const hp = { x: 98 + (near ? 0 : 7), y: 94 }, f = wfoot(hp.x - 6, phase, d), hock = { x: f.x - 8, y: f.y - 22 };
+  const knee = ik(hp.x, hp.y, hock.x, hock.y, 34, 32, -1);
+  organicLimb(c, name, [hp, knee, hock, { x: f.x - 1, y: f.y - 6 }], [26, 12, 8.5, 7], col, rim); wpaw(c, f, col, rim);
 }
 function wTail(c, t, bob, wag) {
-  const N = 13, L = 7;
-  let x = 76, y = 84 + bob, a = -Math.PI / 2 - 0.55 + Math.sin(t * 4.2) * 0.1 * wag;   // up and slightly back, swaying
-  const pts = [{ x, y }];
+  const N = 14, L = 8, pts = [], widths = [];
+  let x = 70, y = 82 + bob, a = -1.95 + Math.sin(t * 4.2) * 0.1 * wag;
+  pts.push({ x, y }); widths.push(11);
   for (let i = 0; i < N; i++) {
-    a += 0.1 + Math.sin(t * 4.2 - i * 0.5) * 0.085 * wag * (0.3 + i / N);
-    x += Math.cos(a) * L; y += Math.sin(a) * L; pts.push({ x, y });
+    a += 0.095 + Math.sin(t * 4.2 - i * 0.5) * 0.085 * wag * (0.3 + i / N);
+    x += Math.cos(a) * L; y += Math.sin(a) * L; pts.push({ x, y }); widths.push(11 - (i / N) * 5.5);
   }
-  wlimb(c, pts, pts.slice(1).map((_, i) => 8.5 - (i / N) * 3.6), '#060608');
-}
-function muscle(c, cx, cy, rx, ry, rot) {
-  const g = c.createRadialGradient(cx - 3, cy - 5, 1, cx, cy, Math.max(rx, ry)); g.addColorStop(0, '#131316'); g.addColorStop(1, '#060607');
-  c.globalAlpha = 0.55; c.fillStyle = g; c.beginPath(); c.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2); c.fill(); c.globalAlpha = 1;
+  organicLimb(c, 'tail', pts, widths, '#060608', 'rgba(120,128,148,0.45)');
 }
 
 function drawWalker(t, d, walking) {
@@ -389,14 +429,13 @@ function drawWalker(t, d, walking) {
   c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, wv.width, wv.height);
   const bob = walking ? Math.cos(d / CYCLE * Math.PI * 4) * 1.1 : 0;
   c.setTransform(WK, 0, 0, WK, 0, WTOP * WK);
-  wFront(c, GPH.farFront, d, '#0d0d10', false);
-  wHind(c, GPH.farHind, d, '#0d0d10', false);
+  wFront(c, 'ff', GPH.farFront, d, false);
+  wHind(c, 'fh', GPH.farHind, d, false);
   wTail(c, t, bob, 1);
-  c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(wCache, 0, bob * WK);   // torso, neck and head (bobbing)
+  c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(wCache, 0, bob * WK);          // torso, neck and head (bobbing)
   c.setTransform(WK, 0, 0, WK, 0, WTOP * WK);
-  muscle(c, 100, 96 + bob, 17, 22, 0.3); muscle(c, 196, 96 + bob, 12, 18, -0.15);
-  wFront(c, GPH.nearFront, d, '#060608', true);
-  wHind(c, GPH.nearHind, d, '#060608', true);
+  wFront(c, 'nf', GPH.nearFront, d, true);
+  wHind(c, 'nh', GPH.nearHind, d, true);
 }
 
 // ====================================================================================
