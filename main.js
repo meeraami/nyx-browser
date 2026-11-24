@@ -1,6 +1,6 @@
 // Nyx: a tabbed browser with an Edge-style site sidebar.
 // Every page (tab or sidebar site) is its own WebContentsView — a real page, never an iframe.
-const { app, BrowserWindow, WebContentsView, ipcMain, session, Menu, net, shell, dialog, clipboard } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, session, Menu, nativeTheme, net, shell, dialog, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
   showBookmarksBar: true,
   askDownload: false,
   downloadDir: '',           // '' = system Downloads folder
+  theme: 'dark',             // 'dark' | 'light' | 'system' — what websites see (prefers-color-scheme)
 };
 
 const DEFAULT_SITES = [
@@ -506,6 +507,7 @@ function setSetting(key, value) {
     case 'searchEngine': if (!SEARCH[value]) return false; settings.searchEngine = value; break;
     case 'startup': if (!['restore', 'home'].includes(value)) return false; settings.startup = value; break;
     case 'showBookmarksBar': settings.showBookmarksBar = !!value; layout(); break;
+    case 'theme': if (!['dark', 'light', 'system'].includes(value)) return false; settings.theme = value; nativeTheme.themeSource = value; break;
     case 'askDownload': settings.askDownload = !!value; break;
     default: return false;
   }
@@ -664,6 +666,7 @@ ipcMain.on('menu:open', (_e, pos) => {
     ] },
     label('History', 'Ctrl+H', { click: () => openInternal('history') }),
     label('Downloads', 'Ctrl+J', { click: () => openInternal('downloads') }),
+    { label: 'Theme (websites)', submenu: ['dark', 'light', 'system'].map(t => ({ label: t[0].toUpperCase() + t.slice(1), type: 'radio', checked: settings.theme === t, click: () => setSetting('theme', t) })) },
     { type: 'separator' },
     label('Settings', '', { click: () => openInternal('settings') }),
     label('Clear browsing data…', 'Ctrl+Shift+Delete', { click: () => openInternal('settings') }),
@@ -745,6 +748,7 @@ app.whenReady().then(() => {
   const osUA = process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7' : 'Windows NT 10.0; Win64; x64';
   ses.setUserAgent(`Mozilla/5.0 (${osUA}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`);
   setupDownloads();
+  nativeTheme.themeSource = ['dark', 'light', 'system'].includes(readJSON('settings.json', {}).theme) ? readJSON('settings.json', {}).theme : 'dark';
 
   settings = { ...DEFAULT_SETTINGS, ...readJSON('settings.json', {}) };
   if (process.env.SNAP_DIR) { settings.downloadDir = path.join(process.env.SNAP_DIR, 'nyx-test-downloads'); fs.mkdirSync(settings.downloadDir, { recursive: true }); }

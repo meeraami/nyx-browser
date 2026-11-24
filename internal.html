@@ -110,6 +110,8 @@
       };
       home.onkeydown = e => { if (e.key === 'Enter') saveHome(); };
 
+      const theme = el('select', {}, [['dark', 'Dark'], ['light', 'Light'], ['system', 'Match my Mac / PC']].map(([v, n]) => el('option', { value: v, textContent: n, selected: s.theme === v })));
+      theme.onchange = () => set('theme', theme.value);
       const engine = el('select', {}, s.engines.map(e => el('option', { value: e.id, textContent: e.name, selected: e.id === s.searchEngine })));
       engine.onchange = () => set('searchEngine', engine.value);
 
@@ -134,6 +136,7 @@
         ),
         el('h2', { textContent: 'Appearance' }),
         el('div', { className: 'card' },
+          el('div', { className: 'row' }, el('div', { className: 'grow', textContent: 'Theme for websites (Google, WhatsApp… use dark mode when they support it)' }), theme),
           el('div', { className: 'row' }, check('showBookmarksBar', 'Show bookmarks bar (Ctrl+Shift+B)')),
         ),
         el('h2', { textContent: 'Downloads' }),
