@@ -519,7 +519,7 @@ function reloadWebPages() {
 // Pages cover Nyx's own UI, so she lives in a transparent, click-through child window over the bottom-left of the main window.
 // She is there while the browser is in dark mode (a black cat of the night), bounds away when it goes light, and comes back for dark.
 let catWin = null, catState = 'none';                        // 'none' | 'in' | 'leaving'
-const CAT_W = 260, CAT_H = 250;
+const CAT_W = 260, CAT_H = 200;
 
 function catBounds() {
   const b = win.getContentBounds();

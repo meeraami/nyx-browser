@@ -3,14 +3,14 @@
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
   #stage { position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; overflow: hidden; }
-  canvas { position: absolute; bottom: 0; left: 22px; display: block; opacity: 0; transform-origin: 50% 100%; }
+  canvas { position: absolute; bottom: 0; left: -24px; display: block; opacity: 0; transform-origin: 50% 100%; }
 </style>
 <div id="stage"><canvas id="c"></canvas></div>
 <script>
 // A real black cat (cat.png, a transparent cut-out) resting on the window, with a ground shadow, slow breathing and blinking.
 // If cat.png is missing nothing is shown. ?freeze=<seconds> draws one still frame without fading (for testing).
 const q = new URLSearchParams(location.search);
-const DISPLAY_H = +q.get('h') || 190;                        // on-screen height of the cat, in CSS px
+const DISPLAY_H = +q.get('h') || 150;                        // on-screen height of the cat, in CSS px
 const freeze = q.has('freeze') ? +q.get('freeze') : null;
 const dpr = window.devicePixelRatio || 1;
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
@@ -21,11 +21,11 @@ const smooth = u => u * u * (3 - 2 * u);
 const EYES = [{ x: 174, y: 150 }, { x: 265, y: 148 }], EYE_RX = 21, EYE_RY = 13;
 
 const img = new Image();
-let ready = false, S = 1, PAD_X = 28, PAD_B = 22, W = 0, H = 0, readyResolve;
+let ready = false, S = 1, PAD_X = 96, PAD_R = 24, PAD_B = 22, W = 0, H = 0, readyResolve;   // PAD_X leaves room on the left for her tail
 const loaded = new Promise(r => (readyResolve = r));
 img.onload = () => {
   S = DISPLAY_H / img.naturalHeight;
-  W = Math.round(img.naturalWidth * S + PAD_X * 2); H = Math.round(DISPLAY_H + PAD_B + 6);
+  W = Math.round(img.naturalWidth * S + PAD_X + PAD_R); H = Math.round(DISPLAY_H + PAD_B + 6);
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
   ready = true; readyResolve();
@@ -40,13 +40,48 @@ function pool(cx, cy, rx, ry, a) {                           // soft elliptical 
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rx, 0, Math.PI * 2); ctx.fill(); ctx.restore();
 }
 
+// A glossy black tail that matches her coat. The photo hides her real one, so this lies along the floor behind her haunch and wags.
+const tailSeed = Array.from({ length: 40 }, (_, i) => { let x = Math.sin(i * 12.9898) * 43758.5453; return x - Math.floor(x); });
+function tail(t, floor) {
+  const N = 16, L = 5.4, wag = 1;
+  let x = PAD_X + 84 * S, y = floor - 92 * S, a = Math.PI - 0.5;                     // starts behind the haunch, heading left and down to the floor
+  const pts = [{ x, y }], widths = [14];
+  for (let i = 0; i < N; i++) {
+    const curl = i < 5 ? 0.075 : 0.105;                                                  // eases down onto the floor, then the tip rises
+    a += curl + Math.sin(t * 3.4 - i * 0.4) * 0.19 * wag * (0.12 + i / N);            // the wag runs up the tail as a wave
+    x += Math.cos(a) * L; y = Math.min(floor - 0.5, y + Math.sin(a) * L); pts.push({ x, y }); widths.push(14 - (i / N) * 8);
+  }
+  const n = pts.length, Lp = [], Rp = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[Math.min(n - 1, i + 1)];
+    let dx = p1.x - p0.x, dy = p1.y - p0.y; const m = Math.hypot(dx, dy) || 1; dx /= m; dy /= m;
+    Lp.push({ x: pts[i].x - dy * widths[i] / 2, y: pts[i].y + dx * widths[i] / 2 });
+    Rp.push({ x: pts[i].x + dy * widths[i] / 2, y: pts[i].y - dx * widths[i] / 2 });
+  }
+  const tip = { x: pts[n - 1].x + Math.cos(a) * 2.4, y: pts[n - 1].y + Math.sin(a) * 2.4 };
+  const ring = [...Lp, tip, ...Rp.reverse()];
+  ctx.save();
+  pool(pts[Math.floor(n / 2)].x, floor + 1, 40, 4, 0.45);                              // contact shadow under the tail
+  ctx.filter = 'blur(0.7px)';                                                         // as soft as the photograph
+  ctx.beginPath(); ctx.moveTo((ring[0].x + ring[1].x) / 2, (ring[0].y + ring[1].y) / 2);
+  for (let i = 1; i < ring.length; i++) { const p = ring[i], q2 = ring[(i + 1) % ring.length]; ctx.quadraticCurveTo(p.x, p.y, (p.x + q2.x) / 2, (p.y + q2.y) / 2); }
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, floor - 40, 0, floor);
+  g.addColorStop(0, '#16161a'); g.addColorStop(0.5, '#08080b'); g.addColorStop(1, '#030304');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = 'rgba(140,150,176,0.16)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';   // sheen along the top edge, like the coat
+  ctx.beginPath(); ctx.moveTo(Lp[1].x, Lp[1].y); for (let i = 2; i < n; i++) ctx.lineTo(Lp[i].x, Lp[i].y); ctx.stroke();
+  ctx.restore();
+}
+
 function frame(t) {
   if (!ready) return;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const floor = H - PAD_B + 4, cx = W / 2, iw = img.naturalWidth * S;
+  const floor = H - PAD_B + 4, iw = img.naturalWidth * S, cx = PAD_X + iw / 2;
   pool(cx, floor + 3, iw * 0.78, 13, 0.5);                   // wide soft shadow
   pool(cx, floor - 1, iw * 0.5, 6, 0.8);                     // tight contact shadow under the paws
+  tail(t, floor);                                            // behind her, so the haunch covers its base
   const br = 1 + Math.sin(t * 1.8) * 0.0045;                 // slow breathing, anchored at the floor
   ctx.save(); ctx.translate(cx, floor); ctx.scale(1, br); ctx.translate(-cx, -floor);
   ctx.drawImage(img, PAD_X, floor - DISPLAY_H, iw, DISPLAY_H);
