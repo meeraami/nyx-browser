@@ -521,7 +521,7 @@ let catWin = null;
 function catWalk() {
   if (!win || win.isDestroyed() || win.isMinimized() || !win.isVisible() || catWin) return;
   const b = win.getContentBounds();
-  const H = 96, speed = 110, rtl = Math.random() < 0.5;
+  const H = 150, speed = 95, rtl = Math.random() < 0.5;
   catWin = new BrowserWindow({
     parent: win, x: b.x, y: b.y + b.height - H, width: b.width, height: H,
     frame: false, transparent: true, hasShadow: false, resizable: false, movable: false,
