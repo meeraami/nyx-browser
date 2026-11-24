@@ -18,7 +18,7 @@ const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const smooth = u => u * u * (3 - 2 * u);
 
 // where the eyes are in cat.png (pixels), used to draw the eyelids for blinking
-const EYES = [{ x: 174, y: 150 }, { x: 265, y: 148 }], EYE_RX = 21, EYE_RY = 13;
+const EYES = [{ x: 171.6, y: 152.1 }, { x: 264.3, y: 150 }], EYE_RX = 21, EYE_RY = 13;
 
 const darkMQ = matchMedia('(prefers-color-scheme: dark)');   // the overlay follows the browser's theme setting
 const img = new Image();
