@@ -27,6 +27,7 @@
       "page-preload.js",
       "ui.html",
       "internal.html",
+      "cat.html",
       "icon.png",
       "icon.icns",
       "package.json"

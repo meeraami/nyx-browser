@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+  #cat { position: absolute; bottom: 2px; left: 0; width: 140px; height: 90px; will-change: transform; }
+  #cat svg { width: 100%; height: 100%; overflow: visible; }
+  .flip { transform: scaleX(-1); transform-origin: 70px 0; }
+  #bob { animation: bob .35s ease-in-out infinite alternate; }
+  @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-2.5px); } }
+  #eyeglow { filter: drop-shadow(0 0 3px #35e06a); }
+</style>
+<div id="cat">
+  <svg viewBox="0 0 140 90" id="svg">
+    <g id="flipper">
+      <g id="bob">
+        <!-- tail -->
+        <g transform="translate(30 42)">
+          <g><animateTransform attributeName="transform" type="rotate" values="-10;14;-10" dur="1.4s" repeatCount="indefinite"/>
+            <path d="M0 0 C-24 -2 -28 -28 -14 -34" fill="none" stroke="#050505" stroke-width="7" stroke-linecap="round"/>
+          </g>
+        </g>
+        <!-- far legs (slightly lighter so they read as behind) -->
+        <g transform="translate(46 54)"><g><animateTransform attributeName="transform" type="rotate" values="26;-26;26" dur=".7s" repeatCount="indefinite"/>
+          <rect x="-4" y="0" width="8" height="26" rx="4" fill="#161616"/></g></g>
+        <g transform="translate(98 54)"><g><animateTransform attributeName="transform" type="rotate" values="-26;26;-26" dur=".7s" repeatCount="indefinite"/>
+          <rect x="-4" y="0" width="8" height="26" rx="4" fill="#161616"/></g></g>
+        <!-- body -->
+        <ellipse cx="66" cy="44" rx="40" ry="17" fill="#050505" stroke="#2c2c2c" stroke-width="1"/>
+        <!-- near legs -->
+        <g transform="translate(40 54)"><g><animateTransform attributeName="transform" type="rotate" values="-26;26;-26" dur=".7s" repeatCount="indefinite"/>
+          <rect x="-4" y="0" width="8" height="26" rx="4" fill="#050505" stroke="#2c2c2c" stroke-width="1"/></g></g>
+        <g transform="translate(92 54)"><g><animateTransform attributeName="transform" type="rotate" values="26;-26;26" dur=".7s" repeatCount="indefinite"/>
+          <rect x="-4" y="0" width="8" height="26" rx="4" fill="#050505" stroke="#2c2c2c" stroke-width="1"/></g></g>
+        <!-- head -->
+        <polygon points="96,22 97,2 110,16" fill="#050505" stroke="#2c2c2c" stroke-width="1" stroke-linejoin="round"/>
+        <polygon points="110,16 123,3 125,24" fill="#050505" stroke="#2c2c2c" stroke-width="1" stroke-linejoin="round"/>
+        <circle cx="110" cy="33" r="17" fill="#050505" stroke="#2c2c2c" stroke-width="1"/>
+        <g id="eyeglow">
+          <ellipse cx="103" cy="31" rx="4.4" ry="3.6" fill="#35e06a"/>
+          <ellipse cx="117" cy="31" rx="4.4" ry="3.6" fill="#35e06a"/>
+          <ellipse cx="103.6" cy="31" rx="1.2" ry="3.2" fill="#000"/>
+          <ellipse cx="117.6" cy="31" rx="1.2" ry="3.2" fill="#000"/>
+        </g>
+        <path d="M108 38 l2 2 l2 -2 z" fill="#3a2a2e"/>
+      </g>
+    </g>
+  </svg>
+</div>
+<script>
+  // ?w=<window width>&dir=ltr|rtl&speed=<px/s>
+  const q = new URLSearchParams(location.search);
+  const W = +q.get('w') || innerWidth, speed = +q.get('speed') || 110, rtl = q.get('dir') === 'rtl';
+  const cat = document.getElementById('cat'), CW = 140;
+  if (rtl) document.getElementById('flipper').classList.add('flip');
+  const from = rtl ? W : -CW, to = rtl ? -CW : W, dist = Math.abs(to - from), t0 = performance.now();
+  (function step(now) {
+    const p = Math.min(1, (now - t0) / 1000 * speed / dist);
+    cat.style.transform = `translateX(${from + (to - from) * p}px)`;
+    if (p < 1) requestAnimationFrame(step);
+  })(t0);
+</script>

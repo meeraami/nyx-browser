@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
   showBookmarksBar: true,
   askDownload: false,
   downloadDir: '',           // '' = system Downloads folder
+  cat: true,                 // a black cat wanders across the window now and then
   theme: 'dark',             // 'dark' | 'light' | 'system' — what websites see (prefers-color-scheme)
 };
 
@@ -514,6 +515,28 @@ function reloadWebPages() {
   }, 350);
 }
 
+// ---------- the cat ----------
+// Pages cover Nyx's own UI, so the cat lives in a transparent, click-through child window laid over the bottom of the main window.
+let catWin = null;
+function catWalk() {
+  if (!win || win.isDestroyed() || win.isMinimized() || !win.isVisible() || catWin) return;
+  const b = win.getContentBounds();
+  const H = 96, speed = 110, rtl = Math.random() < 0.5;
+  catWin = new BrowserWindow({
+    parent: win, x: b.x, y: b.y + b.height - H, width: b.width, height: H,
+    frame: false, transparent: true, hasShadow: false, resizable: false, movable: false,
+    focusable: false, skipTaskbar: true, show: false, backgroundColor: '#00000000',
+  });
+  catWin.setIgnoreMouseEvents(true);
+  const done = () => { if (catWin && !catWin.isDestroyed()) catWin.destroy(); catWin = null; };
+  catWin.once('ready-to-show', () => catWin && catWin.showInactive());
+  catWin.loadFile('cat.html', { query: { w: String(b.width), dir: rtl ? 'rtl' : 'ltr', speed: String(speed) } });
+  setTimeout(done, ((b.width + 140) / speed) * 1000 + 500);
+}
+function scheduleCat() {
+  setTimeout(() => { if (settings.cat && win && win.isFocused()) catWalk(); scheduleCat(); }, (3 + Math.random() * 3) * 60 * 1000);
+}
+
 function setSetting(key, value) {
   switch (key) {
     case 'homePage': { const u = toUrl(value); if (!u || !/^(https?|file):/.test(u) || u.startsWith(engine().url)) return false; settings.homePage = u; break; }
@@ -521,6 +544,7 @@ function setSetting(key, value) {
     case 'startup': if (!['restore', 'home'].includes(value)) return false; settings.startup = value; break;
     case 'showBookmarksBar': settings.showBookmarksBar = !!value; layout(); break;
     case 'theme': if (!['dark', 'light', 'system'].includes(value)) return false; settings.theme = value; nativeTheme.themeSource = value; reloadWebPages(); break;
+    case 'cat': settings.cat = !!value; break;
     case 'askDownload': settings.askDownload = !!value; break;
     default: return false;
   }
@@ -682,6 +706,7 @@ ipcMain.on('menu:open', (_e, pos) => {
     ] },
     label('History', 'Ctrl+H', { click: () => openInternal('history') }),
     label('Downloads', 'Ctrl+J', { click: () => openInternal('downloads') }),
+    label('Let the cat out 🐈‍⬛', '', { click: catWalk }),
     { label: 'Theme (websites)', submenu: ['dark', 'light', 'system'].map(t => ({ label: t[0].toUpperCase() + t.slice(1), type: 'radio', checked: settings.theme === t, click: () => setSetting('theme', t) })) },
     { type: 'separator' },
     label('Settings', '', { click: () => openInternal('settings') }),
@@ -800,6 +825,8 @@ app.whenReady().then(() => {
   }
   win.webContents.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault(); });
   win.on('resize', layout);
+  setTimeout(() => settings.cat && catWalk(), 8000); // say hello shortly after launch
+  scheduleCat();
   win.on('focus', () => win.flashFrame(false));
   win.on('close', flushAll);
   win.loadFile('ui.html');
