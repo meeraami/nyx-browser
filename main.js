@@ -182,6 +182,7 @@ function pushState() {
     zoom: wc ? Math.round(wc.getZoomFactor() * 100) : 100,
     bookmarkable: isWeb(url),
     bookmarked: !!bookmarks.find(b => b.url === url),
+    theme: settings.theme,
     bookmarks: bookmarks.map(b => ({ id: b.id, title: b.title, favicon: b.favicon })),
     showBar: settings.showBookmarksBar,
     find: { ...find },
@@ -640,6 +641,12 @@ ipcMain.on('site:menu', (_e, id) => {
 });
 
 // The ⋮ menu.
+ipcMain.on('theme:cycle', () => {
+  const order = ['dark', 'light', 'system'];
+  setSetting('theme', order[(order.indexOf(settings.theme) + 1) % order.length]);
+  const wc = activeWc(); if (wc && isWeb(wc.getURL())) wc.reload(); // some sites only read the theme on load
+});
+
 ipcMain.on('menu:open', (_e, pos) => {
   const wc = activeWc();
   const url = wc ? wc.getURL() : '';
