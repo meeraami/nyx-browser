@@ -10,7 +10,7 @@
 // A real black cat (cat.png, a transparent cut-out) resting on the window, with a ground shadow, slow breathing and blinking.
 // If cat.png is missing nothing is shown. ?freeze=<seconds> draws one still frame without fading (for testing).
 const q = new URLSearchParams(location.search);
-const DISPLAY_H = +q.get('h') || 150;                        // on-screen height of the cat, in CSS px
+const DISPLAY_H = +q.get('h') || 130;                        // on-screen height of the cat, in CSS px
 const freeze = q.has('freeze') ? +q.get('freeze') : null;
 const dpr = window.devicePixelRatio || 1;
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
@@ -44,13 +44,13 @@ function pool(cx, cy, rx, ry, a) {                           // soft elliptical 
 // A glossy black tail that matches her coat. The photo hides her real one, so this lies along the floor behind her haunch and wags.
 const tailSeed = Array.from({ length: 1200 }, (_, i) => { let x = Math.sin(i * 12.9898) * 43758.5453; return x - Math.floor(x); });
 function tail(t, floor) {
-  const N = 20, L = 5.2, wag = 1;
+  const KS = DISPLAY_H / 150, N = 20, L = 5.2 * KS, wag = 1;
   let x = PAD_X + 84 * S, y = floor - 92 * S, a = Math.PI - 0.5;                     // starts behind the haunch, heading left and down to the floor
-  const pts = [{ x, y }], widths = [15];
+  const pts = [{ x, y }], widths = [15 * KS];
   for (let i = 0; i < N; i++) {
     const curl = i < 4 ? 0.08 : i < 12 ? 0.014 : 0.12;                                  // eases down onto the floor, runs along it, then the tip lifts
     a += curl + Math.sin(t * 3.3 - i * 0.3) * 0.16 * wag * (0.1 + i / N);            // the wag runs up the tail as a wave
-    x += Math.cos(a) * L; y = Math.min(floor - 0.5, y + Math.sin(a) * L); pts.push({ x, y }); widths.push(15 + 4.5 * Math.sin(Math.PI * Math.min(1, (i + 1) / (N * 0.8))) - (i / N) * 6);
+    x += Math.cos(a) * L; y = Math.min(floor - 0.5, y + Math.sin(a) * L); pts.push({ x, y }); widths.push((15 + 4.5 * Math.sin(Math.PI * Math.min(1, (i + 1) / (N * 0.8))) - (i / N) * 6) * KS);
   }
   const n = pts.length, Lp = [], Rp = [];
   for (let i = 0; i < n; i++) {
@@ -81,7 +81,7 @@ function tail(t, floor) {
   for (let i = 1; i < n; i++) for (let sd = 0; sd < 2; sd++) for (let k = 0; k < 8; k++) {
     const r = j => tailSeed[(i * 48 + sd * 24 + k * 3 + j) % 1200];
     const p = (sd ? Rp : Lp)[i], ang = Math.atan2(pts[Math.min(n - 1, i + 1)].y - pts[i - 1].y, pts[Math.min(n - 1, i + 1)].x - pts[i - 1].x);
-    const a2 = ang + (sd ? -1 : 1) * (0.3 + r(0) * 0.55), len = (2.6 + r(2) * 4.2) * (0.75 + 0.45 * widths[i] / 15);
+    const a2 = ang + (sd ? -1 : 1) * (0.3 + r(0) * 0.55), len = (2.6 + r(2) * 4.2) * (0.75 + 0.45 * widths[i] / (15 * KS)) * KS;
     const along = (k - 3.5) * 0.9, inset = r(1) * 3;                                    // spread along the segment, some start inside the edge
     const sx = p.x + Math.cos(ang) * along - Math.cos(ang + (sd ? -Math.PI / 2 : Math.PI / 2)) * inset, sy = p.y + Math.sin(ang) * along - Math.sin(ang + (sd ? -Math.PI / 2 : Math.PI / 2)) * inset;
     ctx.strokeStyle = r(1) < 0.22 ? `rgba(150,160,185,${dk ? 0.2 : 0.05})` : 'rgba(6,6,9,0.62)';
