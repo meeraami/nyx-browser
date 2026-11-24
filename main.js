@@ -764,6 +764,12 @@ app.whenReady().then(() => {
   const osUA = process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7' : 'Windows NT 10.0; Win64; x64';
   ses.setUserAgent(`Mozilla/5.0 (${osUA}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`);
   setupDownloads();
+  // Chromium sends a stale Sec-CH-Prefers-Color-Scheme hint (one theme change behind), so Google renders the wrong theme.
+  // Always send the real current value so server-rendered pages match the theme straight away.
+  ses.webRequest.onBeforeSendHeaders((d, cb) => {
+    d.requestHeaders['Sec-CH-Prefers-Color-Scheme'] = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+    cb({ requestHeaders: d.requestHeaders });
+  });
   nativeTheme.themeSource = ['dark', 'light', 'system'].includes(readJSON('settings.json', {}).theme) ? readJSON('settings.json', {}).theme : 'dark';
 
   settings = { ...DEFAULT_SETTINGS, ...readJSON('settings.json', {}) };
