@@ -517,24 +517,26 @@ function reloadWebPages() {
 
 // ---------- the cat ----------
 // Pages cover Nyx's own UI, so the cat lives in a transparent, click-through child window laid over the bottom of the main window.
+// It fades in somewhere along the bottom edge, sits there blinking for a while, then fades away.
 let catWin = null;
-function catWalk() {
+function catSit() {
   if (!win || win.isDestroyed() || win.isMinimized() || !win.isVisible() || catWin) return;
   const b = win.getContentBounds();
-  const H = 150, speed = 95, rtl = Math.random() < 0.5;
+  const W = 200, H = 260, LIFE = 14;
+  const x = b.x + 40 + Math.random() * Math.max(0, b.width - W - 80);
   catWin = new BrowserWindow({
-    parent: win, x: b.x, y: b.y + b.height - H, width: b.width, height: H,
+    parent: win, x: Math.round(x), y: b.y + b.height - H, width: W, height: H,
     frame: false, transparent: true, hasShadow: false, resizable: false, movable: false,
     focusable: false, skipTaskbar: true, show: false, backgroundColor: '#00000000',
   });
   catWin.setIgnoreMouseEvents(true);
   const done = () => { if (catWin && !catWin.isDestroyed()) catWin.destroy(); catWin = null; };
   catWin.once('ready-to-show', () => catWin && catWin.showInactive());
-  catWin.loadFile('cat.html', { query: { w: String(b.width), dir: rtl ? 'rtl' : 'ltr', speed: String(speed) } });
-  setTimeout(done, ((b.width + 140) / speed) * 1000 + 500);
+  catWin.loadFile('cat.html', { query: { scale: '0.6', life: String(LIFE) } });
+  setTimeout(done, (LIFE + 2) * 1000);
 }
 function scheduleCat() {
-  setTimeout(() => { if (settings.cat && win && win.isFocused()) catWalk(); scheduleCat(); }, (3 + Math.random() * 3) * 60 * 1000);
+  setTimeout(() => { if (settings.cat && win && win.isFocused()) catSit(); scheduleCat(); }, (3 + Math.random() * 3) * 60 * 1000);
 }
 
 function setSetting(key, value) {
@@ -706,7 +708,7 @@ ipcMain.on('menu:open', (_e, pos) => {
     ] },
     label('History', 'Ctrl+H', { click: () => openInternal('history') }),
     label('Downloads', 'Ctrl+J', { click: () => openInternal('downloads') }),
-    label('Let the cat out 🐈‍⬛', '', { click: catWalk }),
+    label('Let the cat out 🐈‍⬛', '', { click: catSit }),
     { label: 'Theme (websites)', submenu: ['dark', 'light', 'system'].map(t => ({ label: t[0].toUpperCase() + t.slice(1), type: 'radio', checked: settings.theme === t, click: () => setSetting('theme', t) })) },
     { type: 'separator' },
     label('Settings', '', { click: () => openInternal('settings') }),
@@ -825,7 +827,7 @@ app.whenReady().then(() => {
   }
   win.webContents.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault(); });
   win.on('resize', layout);
-  setTimeout(() => settings.cat && catWalk(), 8000); // say hello shortly after launch
+  setTimeout(() => settings.cat && catSit(), 8000); // say hello shortly after launch
   scheduleCat();
   win.on('focus', () => win.flashFrame(false));
   win.on('close', flushAll);

@@ -2,230 +2,243 @@
 <meta charset="utf-8">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
-  #mover { position: absolute; bottom: 0; left: 0; will-change: transform; }
+  #wrap { position: absolute; left: 0; bottom: 0; opacity: 0; transition: opacity 1.1s ease; }
+  #wrap.in { opacity: 1; }
   canvas { display: block; }
-  canvas.flip { transform: scaleX(-1); }
 </style>
-<div id="mover"><canvas id="c"></canvas></div>
+<div id="wrap"><canvas id="c"></canvas></div>
 <script>
-// A procedurally animated black cat, drawn side-on facing right (mirrored for right-to-left walks).
-// ?w=<window width>&dir=ltr|rtl&speed=<px/s>   (&freeze=<seconds> draws one still frame, for testing)
+// A black cat sitting front-on, drawn procedurally: shaded coat, thousands of fur strands, a ground shadow.
+// ?scale=<size>&life=<seconds visible>   (&freeze=<seconds> draws one still frame without fading, for testing)
 const q = new URLSearchParams(location.search);
-const W = +q.get('w') || innerWidth, speed = +q.get('speed') || 90, rtl = q.get('dir') === 'rtl';
+const SCALE = +q.get('scale') || 0.6, LIFE = +q.get('life') || 14;
 const freeze = q.has('freeze') ? +q.get('freeze') : null;
+const LW = 320, LH = 420;
+const dpr = window.devicePixelRatio || 1, K = SCALE * dpr;
 
-const PAD = 50;                                              // room on the left so the tail isn't clipped
-const TOP = 26;
-const LW = 240 + PAD, LH = 140 + TOP, SCALE = +q.get('scale') || 0.9, GROUND = 130;       // logical drawing space and its on-screen scale
-const cv = document.getElementById('c'), mover = document.getElementById('mover');
-const dpr = window.devicePixelRatio || 1;
-cv.width = LW * SCALE * dpr; cv.height = LH * SCALE * dpr;
+const cv = document.getElementById('c'), wrap = document.getElementById('wrap');
+cv.width = Math.round(LW * K); cv.height = Math.round(LH * K);
 cv.style.width = LW * SCALE + 'px'; cv.style.height = LH * SCALE + 'px';
-if (rtl) cv.classList.add('flip');
 const ctx = cv.getContext('2d');
 
-// ---- gait ----
-const STRIDE = 17;                                          // half stride length (logical px)
-const DUTY = 0.6;                                           // fraction of the cycle a paw is on the ground
-const PERIOD = (2 * STRIDE) / (DUTY * (speed / SCALE));     // seconds per cycle so paws don't slide on the ground
-// lateral-sequence walk: near hind, near front, far hind, far front
-const PHASE = { nearHind: 0, nearFront: 0.25, farHind: 0.5, farFront: 0.75 };
+// deterministic randomness, so the fur is identical every time
+let seed = 11;
+const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 
-function foot(hipX, phase, t) {
-  const p = (((t / PERIOD) + phase) % 1 + 1) % 1;
-  if (p < DUTY) return { x: hipX + STRIDE - (p / DUTY) * 2 * STRIDE, y: GROUND };
-  const u = (p - DUTY) / (1 - DUTY);
-  return { x: hipX - STRIDE + 2 * STRIDE * u, y: GROUND - 11 * Math.sin(Math.PI * u) };
-}
+// ---------- shapes ----------
+const P = s => new Path2D(s);
+const bodyPath = P('M116,160 C80,182 58,250 62,320 C66,372 108,394 160,394 C212,394 254,372 258,320 C262,250 240,182 204,160 Z');
+const haunchPath = P('M80,262 C44,288 38,346 68,380 C92,396 122,392 128,372 L128,292 C114,264 100,254 80,262 Z');
+const legL = P('M110,236 L152,236 L152,376 C152,392 110,392 110,376 Z');
+const legR = P('M168,236 L210,236 L210,376 C210,392 168,392 168,376 Z');
+const pawL = P('M100,378 C98,358 160,356 158,378 C160,396 98,398 100,378 Z');
+const pawR = P('M162,378 C160,358 222,356 220,378 C222,396 160,398 162,378 Z');
+const neckPath = P('M110,120 C112,160 98,182 78,214 L242,214 C222,182 208,160 210,120 Z');
+const headPath = P('M98,98 C96,58 128,44 160,44 C192,44 224,58 222,98 C230,132 214,168 160,176 C106,168 90,132 98,98 Z');
+const earLPath = P('M100,96 C92,66 94,34 98,16 C120,24 144,40 156,56 Z');
+const earRPath = P('M220,96 C228,66 226,34 222,16 C200,24 176,40 164,56 Z');
+const earLIn = P('M108,86 C103,62 104,42 107,30 C122,38 136,50 144,62 Z');
+const earRIn = P('M212,86 C217,62 216,42 213,30 C198,38 184,50 176,62 Z');
 
-// two-bone IK: returns the middle joint. dir = +1 bends backwards, -1 bends forwards
-function ik(ax, ay, tx, ty, l1, l2, dir) {
-  let dx = tx - ax, dy = ty - ay, d = Math.hypot(dx, dy);
-  d = Math.min(d, l1 + l2 - 0.01);
-  const base = Math.atan2(dy, dx);
-  const a = Math.acos(Math.max(-1, Math.min(1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d))));
-  const ang = base + dir * a;
-  return { x: ax + Math.cos(ang) * l1, y: ay + Math.sin(ang) * l1 };
-}
+// ---------- fur ----------
+const LIGHT = { x: 105, y: 50 };                            // light comes from the upper left
+const lit = (x, y) => Math.pow(clamp(1 - Math.hypot(x - LIGHT.x, y - LIGHT.y) / 300), 1.4);
 
-// ---- drawing helpers ----
-const FUR = '#070708', FUR_FAR = '#0d0d10', RIM = 'rgba(120,125,140,0.55)';
-
-function limb(points, widths, col) {
-  // rim light underneath, fur on top; tapered by drawing each bone with its own width
-  for (const [stroke, extra] of [[RIM, 1.6], [col, 0]]) {
-    ctx.strokeStyle = stroke; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (let i = 0; i < points.length - 1; i++) {
-      ctx.lineWidth = widths[i] + extra;
-      ctx.beginPath(); ctx.moveTo(points[i].x, points[i].y); ctx.lineTo(points[i + 1].x, points[i + 1].y); ctx.stroke();
-    }
+function fur(c, path, box, count, flow, o) {
+  c.save(); c.clip(path); c.lineCap = 'round';
+  for (let i = 0; i < count; i++) {
+    const x = box[0] + rnd() * box[2], y = box[1] + rnd() * box[3];
+    const a = flow(x, y) + (rnd() - 0.5) * 0.3;
+    const len = o.len[0] + rnd() * (o.len[1] - o.len[0]);
+    const bend = (rnd() - 0.5) * 3;
+    const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
+    const l = lit(x, y);
+    if (rnd() < o.light * (0.35 + l)) c.strokeStyle = `rgba(${o.tint},${(0.05 + rnd() * 0.17 * o.glint) * (0.3 + l * 1.4)})`;
+    else c.strokeStyle = `rgba(0,0,0,${0.12 + rnd() * 0.28})`;
+    c.lineWidth = 0.5 + rnd() * 0.5;
+    c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo((x + ex) / 2 + bend, (y + ey) / 2 + bend, ex, ey); c.stroke();
   }
+  c.restore();
+}
+const TINT = '152,160,182';
+const headFlow = (x, y) => Math.atan2(y - 132 - (y < 110 ? 22 : 0), x - 160);   // streams outward from the nose bridge
+const bodyFlow = (x, y) => Math.atan2(46 + (y - 170) * 0.2, (x - 160) * 0.35);
+
+function pool(c, cx, cy, rx, ry, a) {                       // a soft elliptical shadow
+  const g = c.createRadialGradient(cx, cy, 2, cx, cy, rx);
+  g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(0.55, `rgba(0,0,0,${a * 0.4})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.save(); c.translate(cx, cy); c.scale(1, ry / rx); c.translate(-cx, -cy);
+  c.fillStyle = g; c.beginPath(); c.arc(cx, cy, rx, 0, Math.PI * 2); c.fill(); c.restore();
 }
 
-function paw(f, col) {
-  ctx.fillStyle = col;
-  ctx.beginPath(); ctx.ellipse(f.x + 2.5, f.y - 2.2, 6, 3.6, 0, 0, Math.PI * 2); ctx.fill();
-}
+// ---------- static render, painted once into a cache ----------
+const cache = document.createElement('canvas');
+cache.width = cv.width; cache.height = cv.height;
 
-function frontLeg(phase, t, col, near) {
-  const sh = { x: 148 - (near ? 0 : 5), y: 73 };
-  const f = foot(sh.x + 6, phase, t);
-  const wrist = { x: f.x - 1, y: f.y - 9 };
-  const elbow = ik(sh.x, sh.y, wrist.x, wrist.y, 27, 22, +1);
-  limb([sh, elbow, wrist, { x: f.x, y: f.y - 3 }], [11, 7, 5.5], col);
-  paw(f, col);
-}
+function paintStatic(c) {
+  c.setTransform(K, 0, 0, K, 0, 0);
+  let g;
 
-function hindLeg(phase, t, col, near) {
-  const hp = { x: 74 + (near ? 0 : 5), y: 72 };
-  const f = foot(hp.x - 4, phase, t);
-  const hock = { x: f.x - 4, y: f.y - 15 };
-  const knee = ik(hp.x, hp.y, hock.x, hock.y, 27, 25, -1);
-  limb([hp, knee, hock, { x: f.x, y: f.y - 3 }], [14, 8, 5, 5], col);
-  paw(f, col);
-}
+  pool(c, 160, 398, 150, 18, 0.55);                         // wide soft shadow
+  pool(c, 160, 394, 120, 9, 0.85);                          // tight contact shadow under the paws
 
-function tail(t, bodyY) {
-  const N = 14, L = 6.6;
-  let x = 55, y = 64 + bodyY, a = Math.PI + 0.12;
-  const pts = [{ x, y }];
-  for (let i = 0; i < N; i++) {
-    a += 0.085 + Math.sin(t * 2.6 - i * 0.5) * 0.05 * (0.25 + i / N);
-    x += Math.cos(a) * L; y += Math.sin(a) * L; pts.push({ x, y });
+  // body, haunch, front legs
+  g = c.createLinearGradient(60, 170, 250, 396);
+  g.addColorStop(0, '#1d1e24'); g.addColorStop(0.45, '#0b0b0e'); g.addColorStop(1, '#030304');
+  c.fillStyle = g; c.fill(bodyPath);
+  g = c.createRadialGradient(70, 300, 6, 78, 320, 70);
+  g.addColorStop(0, '#16171c'); g.addColorStop(1, '#050506');
+  c.fillStyle = g; c.fill(haunchPath);
+  c.fillStyle = '#060607'; c.fill(legL); c.fill(legR);
+  g = c.createRadialGradient(160, 320, 2, 160, 320, 60);   // dark gap between the legs
+  g.addColorStop(0, 'rgba(0,0,0,0.85)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g; c.fillRect(100, 240, 120, 150);
+  g = c.createLinearGradient(104, 0, 215, 0);               // light catching the left leg
+  g.addColorStop(0, 'rgba(120,128,150,0.20)'); g.addColorStop(0.35, 'rgba(120,128,150,0)');
+  c.fillStyle = g; c.fill(legL);
+
+  fur(c, bodyPath, [40, 150, 240, 250], 5200, bodyFlow, { len: [6, 12], light: 0.6, tint: TINT, glint: 0.55 });
+  g = c.createLinearGradient(0, 120, 0, 214);
+  g.addColorStop(0, 'rgba(11,11,14,1)'); g.addColorStop(0.6, 'rgba(11,11,14,0.8)'); g.addColorStop(1, 'rgba(11,11,14,0)');
+  c.fillStyle = g; c.fill(neckPath);
+  fur(c, neckPath, [78, 120, 164, 94], 1200, bodyFlow, { len: [6, 12], light: 0.6, tint: TINT, glint: 0.55 });
+  g = c.createRadialGradient(160, 190, 4, 160, 190, 60);   // light on the chest
+  g.addColorStop(0, 'rgba(120,128,150,0.16)'); g.addColorStop(1, 'rgba(120,128,150,0)');
+  c.fillStyle = g; c.fillRect(90, 150, 140, 90);
+  fur(c, haunchPath, [20, 250, 120, 150], 1500, (x) => Math.atan2(40, x - 40), { len: [6, 12], light: 0.7, tint: TINT, glint: 0.6 });
+  fur(c, legL, [104, 236, 60, 160], 700, () => Math.PI / 2, { len: [6, 12], light: 0.6, tint: TINT, glint: 0.9 });
+  fur(c, legR, [160, 236, 60, 160], 700, () => Math.PI / 2, { len: [6, 12], light: 0.5, tint: TINT, glint: 0.8 });
+
+  for (const [paw, cx] of [[pawL, 129], [pawR, 191]]) {     // paws with toe lines
+    g = c.createRadialGradient(cx - 8, 368, 2, cx, 380, 34);
+    g.addColorStop(0, '#1a1b20'); g.addColorStop(1, '#050506');
+    c.fillStyle = g; c.fill(paw);
+    c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 1.3; c.lineCap = 'round';
+    for (const dx of [-9, 0, 9]) { c.beginPath(); c.moveTo(cx + dx, 380); c.lineTo(cx + dx, 388); c.stroke(); }
+    c.strokeStyle = 'rgba(140,148,170,0.30)'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(cx - 24, 366); c.quadraticCurveTo(cx, 358, cx + 24, 366); c.stroke();
+    fur(c, paw, [cx - 32, 356, 64, 42], 160, () => Math.PI / 2, { len: [4, 8], light: 0.55, tint: TINT, glint: 0.8 });
   }
-  const w = i => 8 - (i / N) * 3.2;
-  limb(pts, pts.slice(1).map((_, i) => w(i)), FUR);
-}
 
-function eye(cx, cy, open) {
-  ctx.save();
-  ctx.translate(cx, cy); ctx.scale(1, Math.max(0.08, open));
-  ctx.shadowColor = 'rgba(70,255,120,0.85)'; ctx.shadowBlur = 7;
-  const g = ctx.createRadialGradient(0, 0, 0.5, 0, 0, 5.5);
-  g.addColorStop(0, '#c9ffb0'); g.addColorStop(0.45, '#3fe06c'); g.addColorStop(1, '#0f8a3a');
-  ctx.fillStyle = g;
-  ctx.beginPath();                                          // almond shape
-  ctx.moveTo(-5.6, 0.4); ctx.quadraticCurveTo(0, -5.4, 5.6, 0.2); ctx.quadraticCurveTo(0, 4.8, -5.6, 0.4); ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.ellipse(0.4, 0, 1.25, 3.6, 0, 0, Math.PI * 2); ctx.fill();   // slit pupil
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  ctx.beginPath(); ctx.arc(-1.6, -1.6, 0.9, 0, Math.PI * 2); ctx.fill();            // glint
-  ctx.restore();
-}
-
-function head(t, bodyY, nod) {
-  ctx.save();
-  ctx.translate(0, bodyY + nod);
-  // neck
-  // ears
-  for (const e of [
-    [[166, 46], [169, 24], [184, 41]],                      // far ear
-    [[182, 41], [196, 26], [199, 49]],                      // near ear
-  ]) {
-    ctx.fillStyle = FUR; ctx.strokeStyle = RIM; ctx.lineWidth = 1.2; ctx.lineJoin = 'round';
-    ctx.beginPath(); ctx.moveTo(...e[0]); ctx.lineTo(...e[1]); ctx.lineTo(...e[2]); ctx.closePath(); ctx.fill(); ctx.stroke();
+  // ears (behind the head)
+  for (const [ear, inner, mirror] of [[earLPath, earLIn, false], [earRPath, earRIn, true]]) {
+    g = c.createLinearGradient(mirror ? 230 : 90, 10, mirror ? 170 : 150, 90);
+    g.addColorStop(0, mirror ? '#0a0a0c' : '#1d1e24'); g.addColorStop(1, '#050506');
+    c.fillStyle = g; c.fill(ear);
+    g = c.createLinearGradient(160, 20, 160, 90);
+    g.addColorStop(0, '#2a1a1f'); g.addColorStop(1, '#0a0506');
+    c.fillStyle = g; c.fill(inner);
+    fur(c, inner, [mirror ? 170 : 100, 24, 50, 70], 90, () => -Math.PI / 2 + (mirror ? -0.35 : 0.35), { len: [5, 10], light: 0.8, tint: '120,100,104', glint: 0.8 });
+    fur(c, ear, [mirror ? 170 : 90, 14, 60, 90], 160, () => -Math.PI / 2 + (mirror ? 0.4 : -0.4), { len: [5, 10], light: 0.5, tint: TINT, glint: 0.9 });
   }
-  ctx.fillStyle = '#2b1c21';                                // inner ears
-  ctx.beginPath(); ctx.moveTo(171, 40); ctx.lineTo(171.5, 29); ctx.lineTo(180, 39); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(187, 40); ctx.lineTo(194, 31); ctx.lineTo(195.5, 44); ctx.fill();
-  // skull + muzzle
-  const hg = ctx.createRadialGradient(176, 46, 2, 180, 54, 24);
-  hg.addColorStop(0, '#1b1b20'); hg.addColorStop(1, FUR);
-  ctx.fillStyle = hg; ctx.strokeStyle = RIM; ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(164, 52);
-  ctx.bezierCurveTo(164, 38, 192, 36, 198, 48);
-  ctx.bezierCurveTo(203, 54, 204, 62, 198, 67);
-  ctx.bezierCurveTo(190, 73, 168, 72, 164, 60);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
-  // eyes (blink every ~4.5 s)
-  const bl = t % 4.5, open = bl > 4.3 ? Math.abs(Math.cos((bl - 4.3) / 0.2 * Math.PI / 2)) : 1;
-  eye(177, 52, open); eye(191, 52, open);
-  // nose + mouth
-  ctx.fillStyle = '#5b3a42';
-  ctx.beginPath(); ctx.moveTo(196.5, 60); ctx.lineTo(201, 60); ctx.lineTo(198.7, 63.2); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = 'rgba(90,70,76,0.7)'; ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.moveTo(198.7, 63.2); ctx.lineTo(198.7, 65); ctx.moveTo(198.7, 65); ctx.quadraticCurveTo(195, 68, 192, 65.5); ctx.stroke();
-  // whiskers
-  ctx.strokeStyle = 'rgba(235,235,240,0.55)'; ctx.lineWidth = 0.7;
-  const sway = Math.sin(t * 6) * 0.6;
-  for (const [dx, dy] of [[26, -5], [28, 1], [25, 7]]) {
-    ctx.beginPath(); ctx.moveTo(196, 63); ctx.quadraticCurveTo(196 + dx * 0.55, 63 + dy * 0.3 + sway, 196 + dx, 63 + dy + sway); ctx.stroke();
+
+  // head
+  g = c.createRadialGradient(130, 70, 6, 160, 110, 100);
+  g.addColorStop(0, '#24252c'); g.addColorStop(0.5, '#0d0d10'); g.addColorStop(1, '#040405');
+  c.fillStyle = g; c.fill(headPath);
+  fur(c, headPath, [90, 40, 140, 140], 4200, headFlow, { len: [5, 10], light: 0.7, tint: '156,164,186', glint: 0.8 });
+  for (const ex of [133, 187]) {                            // darker fur around the eyes
+    g = c.createRadialGradient(ex, 102, 4, ex, 102, 30);
+    g.addColorStop(0, 'rgba(0,0,0,0.7)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g; c.fillRect(ex - 32, 70, 64, 64);
   }
-  ctx.restore();
+  g = c.createRadialGradient(150, 62, 2, 150, 70, 56);      // sheen on the forehead
+  g.addColorStop(0, 'rgba(170,178,200,0.26)'); g.addColorStop(1, 'rgba(170,178,200,0)');
+  c.save(); c.clip(headPath); c.fillStyle = g; c.fillRect(90, 40, 140, 100); c.restore();
+  g = c.createLinearGradient(160, 96, 160, 130);            // and down the bridge of the nose
+  g.addColorStop(0, 'rgba(150,158,180,0)'); g.addColorStop(0.5, 'rgba(150,158,180,0.13)'); g.addColorStop(1, 'rgba(150,158,180,0)');
+  c.fillStyle = g; c.fillRect(153, 96, 14, 36);
+  g = c.createLinearGradient(90, 20, 230, 180);             // rim light on the lit edges
+  g.addColorStop(0, 'rgba(170,180,205,0.55)'); g.addColorStop(0.5, 'rgba(170,180,205,0.05)'); g.addColorStop(1, 'rgba(170,180,205,0)');
+  c.strokeStyle = g; c.lineWidth = 1.6; c.lineJoin = 'round';
+  c.stroke(headPath); c.stroke(earLPath); c.stroke(earRPath);
+
+  // muzzle: whisker pads, nose, mouth
+  g = c.createRadialGradient(160, 140, 2, 160, 142, 36);
+  g.addColorStop(0, 'rgba(60,62,72,0.55)'); g.addColorStop(1, 'rgba(60,62,72,0)');
+  c.fillStyle = g; c.fillRect(120, 118, 80, 50);
+  c.fillStyle = 'rgba(8,8,10,0.9)';
+  for (const side of [-1, 1]) for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++) {
+    c.beginPath(); c.arc(160 + side * (14 + k * 7 + r * 1.5), 142 + r * 5 - k * 1.2, 0.9, 0, Math.PI * 2); c.fill();
+  }
+  g = c.createLinearGradient(0, 124, 0, 140);
+  g.addColorStop(0, '#4a3c42'); g.addColorStop(1, '#1d1618');
+  c.fillStyle = g;
+  c.beginPath(); c.moveTo(150, 125); c.quadraticCurveTo(160, 121, 170, 125); c.quadraticCurveTo(168, 134, 160, 139); c.quadraticCurveTo(152, 134, 150, 125); c.fill();
+  c.fillStyle = 'rgba(190,175,185,0.35)';
+  c.beginPath(); c.ellipse(157, 126, 4, 1.6, -0.2, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = 1; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(160, 139); c.lineTo(160, 146);
+  c.moveTo(160, 146); c.quadraticCurveTo(155, 150, 149, 148);
+  c.moveTo(160, 146); c.quadraticCurveTo(165, 150, 171, 148); c.stroke();
+  g = c.createRadialGradient(160, 152, 1, 160, 152, 16);   // shadowed chin
+  g.addColorStop(0, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g; c.fillRect(140, 140, 40, 30);
+
+  // whiskers, long and fine, plus a few above the eyes
+  c.lineWidth = 0.7;
+  for (const side of [-1, 1]) for (const [dy, dl] of [[-14, 6], [2, 10], [18, 12], [34, 12]]) {
+    const sx = 160 + side * 22, sy = 143 + dy * 0.25;
+    const ex = 160 + side * (92 + dl * 2), ey = 152 + dy * 0.9;
+    const wg = c.createLinearGradient(sx, sy, ex, ey);
+    wg.addColorStop(0, 'rgba(225,228,238,0.55)'); wg.addColorStop(1, 'rgba(225,228,238,0.05)');
+    c.strokeStyle = wg;
+    c.beginPath(); c.moveTo(sx, sy); c.quadraticCurveTo((sx + ex) / 2, sy - 12 - Math.abs(dy) * 0.2, ex, ey); c.stroke();
+  }
+  c.strokeStyle = 'rgba(225,228,238,0.35)';
+  for (const side of [-1, 1]) { c.beginPath(); c.moveTo(160 + side * 38, 84); c.quadraticCurveTo(160 + side * 52, 72, 160 + side * 62, 74); c.stroke(); }
+}
+paintStatic(cache.getContext('2d'));
+
+// ---------- live parts: eyes and breathing ----------
+function eye(c, cx, cy, flip, open) {
+  const o = Math.max(0.04, open);
+  c.save(); c.translate(cx, cy); c.scale(flip ? -1 : 1, 1);
+  const almond = () => { c.beginPath(); c.moveTo(-14, 2.5); c.quadraticCurveTo(-1, -13, 14, -1.5); c.quadraticCurveTo(0, 10, -14, 2.5); c.closePath(); };
+  c.save(); c.scale(1, o);
+  c.shadowColor = 'rgba(190,220,90,0.35)'; c.shadowBlur = 8; c.fillStyle = '#000'; almond(); c.fill(); c.shadowBlur = 0;
+  almond(); c.clip();
+  const ig = c.createRadialGradient(0, 0, 1, 0, 0, 15);
+  ig.addColorStop(0, '#eaf8a6'); ig.addColorStop(0.45, '#b4dc50'); ig.addColorStop(0.85, '#5f9c2a'); ig.addColorStop(1, '#2c5412');
+  c.fillStyle = ig; c.fillRect(-16, -14, 32, 28);
+  const lg = c.createLinearGradient(0, -12, 0, 6);          // shadow from the upper lid
+  lg.addColorStop(0, 'rgba(0,0,0,0.75)'); lg.addColorStop(0.45, 'rgba(0,0,0,0)');
+  c.fillStyle = lg; c.fillRect(-16, -14, 32, 22);
+  c.strokeStyle = 'rgba(70,95,20,0.5)'; c.lineWidth = 0.6;  // iris fibres
+  for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2; c.beginPath(); c.moveTo(Math.cos(a) * 3.6, Math.sin(a) * 6); c.lineTo(Math.cos(a) * 11, Math.sin(a) * 9); c.stroke(); }
+  c.fillStyle = '#050703'; c.beginPath(); c.ellipse(0.5, 0, 2.7, 8.6, 0, 0, Math.PI * 2); c.fill();   // slit pupil
+  c.restore();
+  c.save(); c.scale(1, o);
+  c.strokeStyle = 'rgba(0,0,0,0.95)'; c.lineWidth = 1.8; almond(); c.stroke();
+  c.restore();
+  if (open > 0.5) {                                          // catchlights
+    c.fillStyle = `rgba(255,255,255,${0.9 * open})`; c.beginPath(); c.ellipse(-4.2, -3, 2.1, 1.6, -0.5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = `rgba(255,255,255,${0.35 * open})`; c.beginPath(); c.arc(4, 2.6, 1, 0, Math.PI * 2); c.fill();
+  }
+  c.restore();
 }
 
-function body() {
-  const g = ctx.createLinearGradient(0, 40, 0, 92);
-  g.addColorStop(0, '#202026'); g.addColorStop(0.35, '#0b0b0d'); g.addColorStop(1, '#030304');
-  ctx.fillStyle = g; ctx.strokeStyle = RIM; ctx.lineWidth = 1.3; ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(56, 68);
-  ctx.bezierCurveTo(50, 53, 62, 46, 82, 46);                // rump and back
-  ctx.bezierCurveTo(102, 47, 122, 44, 142, 45);
-  ctx.bezierCurveTo(154, 45, 163, 41, 174, 44);             // neck rising to the head
-  ctx.lineTo(176, 68);
-  ctx.bezierCurveTo(170, 82, 160, 90, 146, 90);             // throat, chest
-  ctx.bezierCurveTo(130, 91, 106, 90, 86, 90);              // belly
-  ctx.bezierCurveTo(70, 90, 58, 82, 56, 68);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
-  // soft highlight along the spine
-  const sp = ctx.createLinearGradient(60, 0, 160, 0);
-  sp.addColorStop(0, 'rgba(160,165,185,0)'); sp.addColorStop(0.5, 'rgba(160,165,185,0.22)'); sp.addColorStop(1, 'rgba(160,165,185,0)');
-  ctx.strokeStyle = sp; ctx.lineWidth = 2; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(66, 50); ctx.bezierCurveTo(96, 49, 122, 47, 150, 48); ctx.stroke();
-}
-
-// the muscle at the top of a near-side leg, so thigh and shoulder blend into the torso
-function muscle(cx, cy, rx, ry, rot) {
-  const g = ctx.createRadialGradient(cx - 3, cy - 5, 1, cx, cy, Math.max(rx, ry));
-  g.addColorStop(0, '#131316'); g.addColorStop(1, '#060607');
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2); ctx.fill();
-}
-
-function draw(t) {
-  ctx.setTransform(dpr * SCALE, 0, 0, dpr * SCALE, PAD * dpr * SCALE, TOP * dpr * SCALE);
-  ctx.clearRect(-PAD, -TOP, LW, LH);
-  // ground shadow
-  const sg = ctx.createRadialGradient(110, GROUND + 1, 4, 110, GROUND + 1, 90);
-  sg.addColorStop(0, 'rgba(0,0,0,0.30)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = sg; ctx.beginPath(); ctx.ellipse(110, GROUND + 1, 90, 6, 0, 0, Math.PI * 2); ctx.fill();
-
-  const stepT = (t / PERIOD) * Math.PI * 4;
-  const bob = Math.cos(stepT) * 1.1, roll = Math.sin(stepT / 2) * 0.012;
-
-  // far legs and tail stay fixed to the ground/hips; the torso bobs and rolls a little
-  frontLeg(PHASE.farFront, t, FUR_FAR, false);
-  hindLeg(PHASE.farHind, t, FUR_FAR, false);
-  ctx.save();
-  ctx.translate(105, 66); ctx.rotate(roll); ctx.translate(-105, -66 + bob);
-  tail(t, 0);
-  body();
-  ctx.restore();
-  frontLeg(PHASE.nearFront, t, FUR, true);
-  hindLeg(PHASE.nearHind, t, FUR, true);
-  ctx.save(); ctx.translate(105, 66); ctx.rotate(roll); ctx.translate(-105, -66 + bob);
-  muscle(80, 70, 15, 19, 0.35); muscle(147, 68, 10, 16, -0.2);
-  ctx.restore();
-  ctx.save();
-  ctx.translate(105, 66); ctx.rotate(roll); ctx.translate(-105, -66);
-  head(t, bob, Math.sin(stepT / 2 + 1) * 0.9);
-  ctx.restore();
+function frame(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const br = 1 + Math.sin(t * 1.7) * 0.004;                  // slow breathing
+  ctx.setTransform(K, 0, 0, K * br, 0, 396 * K * (1 - br));
+  ctx.drawImage(cache, 0, 0, LW, LH);
+  const b = (t + 1.2) % 5.3;                                 // blink every ~5 s, now and then a slow sleepy half-close
+  let open = 1;
+  if (b > 5.05) open = Math.abs(Math.cos((b - 5.05) / 0.25 * Math.PI / 2));
+  else if (Math.floor((t + 1.2) / 5.3) % 3 === 2 && b > 2 && b < 3.4) open = 0.72 + 0.28 * Math.abs(Math.cos((b - 2) / 1.4 * Math.PI));
+  eye(ctx, 133, 101, false, open);
+  eye(ctx, 187, 101, true, open);
 }
 
 if (freeze !== null) {
-  draw(freeze); mover.style.transform = 'translateX(20px)';
+  wrap.style.transition = 'none'; wrap.classList.add('in'); frame(freeze);
 } else {
-  const CATW = LW * SCALE;
-  const from = rtl ? W : -CATW, to = rtl ? -CATW : W, dist = Math.abs(to - from), t0 = performance.now();
-  (function step(now) {
-    const t = (now - t0) / 1000;
-    const p = Math.min(1, t * speed / dist);
-    mover.style.transform = `translateX(${from + (to - from) * p}px)`;
-    draw(t);
-    if (p < 1) requestAnimationFrame(step);
-  })(t0);
+  const t0 = performance.now();
+  requestAnimationFrame(() => wrap.classList.add('in'));
+  setTimeout(() => wrap.classList.remove('in'), LIFE * 1000);    // fades out; the app closes the window afterwards
+  (function loop(now) { frame((now - t0) / 1000); requestAnimationFrame(loop); })(t0);
 }
 </script>
