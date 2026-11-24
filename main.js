@@ -586,6 +586,36 @@ async function clearData({ history: h, cookies, cache }) {
   return true;
 }
 
+// ---------- WhatsApp in a narrow sidebar ----------
+// WhatsApp Web lays itself out in a container with a 748px minimum width. In a ~400px sidebar the chat list fits but a chat that
+// opens is pushed off-screen to the right, so "clicking a chat does nothing". This makes it behave like WhatsApp's phone layout
+// when the page is narrower than that: the chat replaces the list while it is open, and a small back button (or Esc) returns.
+const WA_NARROW_JS = `(() => {
+  if (window.__nyxWaNarrow) return; window.__nyxWaNarrow = true;
+  const css = \`@media (max-width: 747px) {
+    [data-testid="wa-web-main-screen"] > div { min-width: 0 !important; width: 100% !important; }
+    [data-testid="wa-web-main-screen"] > div > div:has(#side) { flex: 1 1 auto !important; max-width: none !important; min-width: 0 !important; }
+    [data-testid="wa-web-main-screen"] > div > div:has(#side) + div:not(:has(#main)) { display: none !important; }
+    [data-testid="wa-web-main-screen"] > div > div:has(#side) + div:has(#main) { flex: 1 1 auto !important; min-width: 0 !important; width: auto !important; }
+    [data-testid="wa-web-main-screen"] > div:has(#main) > div:has(#side) { display: none !important; }
+    #main header { padding-left: 38px !important; }
+  }\`;
+  const st = document.createElement('style'); st.id = 'nyx-wa-narrow'; st.textContent = css; (document.head || document.documentElement).appendChild(st);
+  const btn = document.createElement('button'); btn.id = 'nyx-wa-back'; btn.type = 'button'; btn.title = 'Back to chats (Esc)'; btn.textContent = '\\u2039';
+  btn.style.cssText = 'position:fixed;left:68px;top:14px;width:30px;height:30px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.4);color:#fff;font:600 22px/27px system-ui,sans-serif;cursor:pointer;z-index:2147483647;display:none';
+  btn.tabIndex = -1; btn.addEventListener('mousedown', e => e.preventDefault());        // do not take focus: WhatsApp ignores Esc while a button is focused
+  btn.onclick = () => { const to = document.activeElement && document.activeElement !== btn ? document.activeElement : document.body; for (const t of ['keydown', 'keyup']) to.dispatchEvent(new KeyboardEvent(t, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true })); };
+  document.documentElement.appendChild(btn);
+  let queued = false;
+  const update = () => { queued = false; btn.style.display = (innerWidth < 748 && document.querySelector('#main')) ? 'block' : 'none'; };
+  const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(update); } };
+  new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true }); addEventListener('resize', schedule); schedule();
+})()`;
+function fixWhatsAppNarrow(wc) {
+  const run = () => wc.executeJavaScript(WA_NARROW_JS).catch(() => {});
+  wc.on('dom-ready', run); wc.on('did-finish-load', run);
+}
+
 // ---------- sidebar sites ----------
 function hideSite() {
   if (activeSite && siteViews[activeSite]) win.contentView.removeChildView(siteViews[activeSite]);
@@ -606,6 +636,7 @@ function toggleSite(id) {
         const ico = icons.find(i => /^https:/.test(i));
         if (ico && site.icon !== ico) { site.icon = ico; saveSites(); pushState(); }
       });
+      if (/^https:\/\/web\.whatsapp\.com/i.test(site.url)) fixWhatsAppNarrow(view.webContents);
       view.webContents.loadURL(site.url);
       siteViews[id] = view;
     }
