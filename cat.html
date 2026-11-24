@@ -149,10 +149,8 @@ const ctx = cv.getContext('2d');
 const sLit = litFn({ x: 95, y: 40, r: 280 });
 
 const D = {
-  body: 'M84,200 C70,182 104,166 150,166 C196,166 230,182 216,200 C240,234 240,298 216,322 C194,340 106,340 84,322 C60,298 60,234 84,200 Z',
-  haunch: 'M64,262 C42,282 46,322 72,334 C92,342 112,336 116,318 L114,278 C102,254 80,250 64,262 Z',
-  legL: 'M106,252 L144,252 L144,326 C144,340 106,340 106,326 Z',
-  legR: 'M156,252 L194,252 L194,326 C194,340 156,340 156,326 Z',
+  body: 'M54,330 C40,296 42,232 84,196 C108,170 192,170 216,196 C258,232 260,296 246,330 C240,346 60,346 54,330 Z',
+  haunch: 'M50,292 C40,310 46,336 70,342 C88,344 98,330 96,312 C94,296 70,284 50,292 Z',
   head: 'M68,112 C66,64 102,38 150,38 C198,38 234,64 232,112 C234,148 204,178 150,182 C96,178 66,148 68,112 Z',
   earL: 'M78,82 C68,58 70,38 82,26 C100,28 118,44 128,62 Z',
   earR: 'M222,82 C232,58 230,38 218,26 C200,28 182,44 172,62 Z',
@@ -167,48 +165,35 @@ cache.width = cv.width; cache.height = cv.height;
 function paintSit(c) {
   c.setTransform(K, 0, 0, K, 0, 0);
   let g;
-  pool(c, 150, 342, 150, 16, 0.5);                           // soft pool of shadow and a tight one under the paws
-  pool(c, 150, 338, 104, 8, 0.85);
+  pool(c, 150, 344, 160, 16, 0.5);                           // soft pool of shadow and a tight one under the paws
+  pool(c, 150, 342, 120, 8, 0.85);
 
-  // fluffy tail curling up behind her right side
-  organicLimb(c, sLit, 'stail', [{ x: 206, y: 322 }, { x: 246, y: 330 }, { x: 266, y: 304 }, { x: 262, y: 274 }, { x: 250, y: 254 }],
-    [20, 24, 24, 20, 11], '#060608', 'rgba(130,138,158,0.5)');
-
-  // body, haunch, front legs
-  g = c.createLinearGradient(70, 190, 230, 340);
-  g.addColorStop(0, '#202127'); g.addColorStop(0.45, '#0c0c0f'); g.addColorStop(1, '#030304');
+  // resting loaf: paws tucked under her body, so only a rounded, fluffy mound shows beneath the head
+  g = c.createLinearGradient(60, 196, 240, 346);
+  g.addColorStop(0, '#202127'); g.addColorStop(0.4, '#0c0c0f'); g.addColorStop(1, '#030304');
   c.fillStyle = g; c.fill(Dp.body);
-  g = c.createRadialGradient(70, 300, 6, 80, 310, 62);
-  g.addColorStop(0, '#17181d'); g.addColorStop(1, '#050506');
+  g = c.createRadialGradient(66, 318, 4, 72, 322, 46);
+  g.addColorStop(0, '#17181d'); g.addColorStop(1, 'rgba(5,5,6,0)');
   c.fillStyle = g; c.fill(Dp.haunch);
-  c.fillStyle = '#060607'; c.fill(Dp.legL); c.fill(Dp.legR);
-  g = c.createRadialGradient(150, 312, 2, 150, 312, 50);     // dark gap between the legs
-  g.addColorStop(0, 'rgba(0,0,0,0.85)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-  c.fillStyle = g; c.fillRect(100, 240, 100, 100);
-  g = c.createLinearGradient(100, 0, 200, 0);
-  g.addColorStop(0, 'rgba(120,128,150,0.2)'); g.addColorStop(0.4, 'rgba(120,128,150,0)');
-  c.fillStyle = g; c.fill(Dp.legL);
-  const down = (x, y) => Math.atan2(46 + (y - 190) * 0.2, (x - 150) * 0.4);
-  fur(c, sLit, Dp.body, [58, 180, 184, 166], 5200, down, { len: [7, 15], light: 0.62, glint: 0.7 });
-  fur(c, sLit, Dp.haunch, [40, 248, 80, 96], 1400, (x) => Math.atan2(40, x - 40), { len: [7, 13], light: 0.7, glint: 0.8 });
-  fur(c, sLit, Dp.legL, [102, 250, 46, 90], 800, () => Math.PI / 2, { len: [6, 12], light: 0.6, glint: 0.7 });
-  fur(c, sLit, Dp.legR, [152, 250, 46, 90], 800, () => Math.PI / 2, { len: [6, 12], light: 0.5, glint: 0.6 });
-  g = c.createRadialGradient(150, 215, 3, 150, 215, 55);     // light on the chest
-  g.addColorStop(0, 'rgba(130,138,160,0.18)'); g.addColorStop(1, 'rgba(130,138,160,0)');
-  c.fillStyle = g; c.fillRect(90, 180, 120, 80);
-  edgeFuzz(c, sLit, D.body, [150, 260], { count: 420, len: [3, 8], skip: (x, y) => y < 200 });
-  edgeFuzz(c, sLit, D.haunch, [80, 300], { count: 120, len: [3, 7] });
-
-  // chubby paws
-  for (const cx of [125, 175]) {
-    g = c.createRadialGradient(cx - 8, 328, 2, cx, 336, 30);
-    g.addColorStop(0, '#1b1c21'); g.addColorStop(1, '#050506');
-    c.fillStyle = g; c.beginPath(); c.ellipse(cx, 333, 25, 11, 0, 0, Math.PI * 2); c.fill();
-    c.strokeStyle = 'rgba(0,0,0,0.65)'; c.lineWidth = 1.2; c.lineCap = 'round';
-    for (const dx of [-8, 0, 8]) { c.beginPath(); c.moveTo(cx + dx, 331); c.lineTo(cx + dx, 338); c.stroke(); }
-    c.strokeStyle = 'rgba(140,148,170,0.3)'; c.lineWidth = 1;
-    c.beginPath(); c.moveTo(cx - 20, 328); c.quadraticCurveTo(cx, 321, cx + 20, 328); c.stroke();
+  const down = (x, y) => Math.atan2(40 + (y - 196) * 0.25, (x - 150) * 0.5);
+  fur(c, sLit, Dp.body, [40, 190, 220, 160], 5600, down, { len: [7, 15], light: 0.62, glint: 0.7 });
+  fur(c, sLit, Dp.haunch, [38, 284, 64, 62], 500, (x) => Math.atan2(30, x - 40), { len: [6, 11], light: 0.7, glint: 0.8 });
+  g = c.createRadialGradient(150, 232, 4, 150, 236, 70);       // light on the chest
+  g.addColorStop(0, 'rgba(130,138,160,0.2)'); g.addColorStop(1, 'rgba(130,138,160,0)');
+  c.save(); c.clip(Dp.body); c.fillStyle = g; c.fillRect(70, 176, 160, 120); c.restore();
+  g = c.createLinearGradient(0, 290, 0, 346);                  // she is heavy and settled: shade towards the floor
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.55)');
+  c.save(); c.clip(Dp.body); c.fillStyle = g; c.fillRect(40, 290, 220, 60); c.restore();
+  for (const x of [112, 150, 188]) {                           // the soft crease where her tucked paws sit
+    c.strokeStyle = 'rgba(0,0,0,0.35)'; c.lineWidth = 1.4; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(x - 10, 322); c.quadraticCurveTo(x, 316, x + 10, 322); c.stroke();
   }
+  edgeFuzz(c, sLit, D.body, [150, 290], { count: 420, len: [3, 8], skip: (x, y) => y < 200 });
+  edgeFuzz(c, sLit, D.haunch, [70, 316], { count: 60, len: [3, 6], skip: (x, y) => x > 60 });
+
+  // tail curled round the front, over her tucked paws
+  organicLimb(c, sLit, 'stail', [{ x: 250, y: 300 }, { x: 254, y: 326 }, { x: 230, y: 342 }, { x: 192, y: 343 }, { x: 160, y: 337 }],
+    [16, 21, 22, 17, 9], '#060608', 'rgba(130,138,158,0.5)');
 
   // ears, behind the head: small and rounded
   for (const [ear, inner, mirror] of [[Dp.earL, Dp.earLIn, false], [Dp.earR, Dp.earRIn, true]]) {
@@ -271,9 +256,9 @@ function sitFrame(t) {
   ctx.setTransform(K, 0, 0, K * br, 0, 340 * K * (1 - br));
   ctx.drawImage(cache, 0, 0, LW, LH);
   const b = (t + 1.2) % 5.1;                                 // blink, now and then a slow sleepy half-close
-  let open = 1;
+  let open = 0.9;                                            // relaxed, a touch sleepy
   if (b > 4.85) open = Math.abs(Math.cos((b - 4.85) / 0.25 * Math.PI / 2));
-  else if (Math.floor((t + 1.2) / 5.1) % 3 === 2 && b > 2 && b < 3.4) open = 0.7 + 0.3 * Math.abs(Math.cos((b - 2) / 1.4 * Math.PI));
+  else if (Math.floor((t + 1.2) / 5.1) % 3 === 2 && b > 2 && b < 3.4) open = 0.5 + 0.4 * Math.abs(Math.cos((b - 2) / 1.4 * Math.PI));
   kittenEye(ctx, 112, 120, 21, 19, open, false);
   kittenEye(ctx, 188, 120, 21, 19, open, true);
 }
