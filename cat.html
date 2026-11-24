@@ -55,10 +55,13 @@ function pool(cx, cy, rx, ry, a, col = '0,0,0') {                // soft ellipti
 // A glossy black tail that matches her coat. The photo hides her real one, so this lies along the floor behind her haunch and wags.
 const tailSeed = Array.from({ length: 1200 }, (_, i) => { let x = Math.sin(i * 12.9898) * 43758.5453; return x - Math.floor(x); });
 // "how dark" the page is, eased over about half a second so every theme-dependent detail blends instead of switching in one frame
-let dm = darkMQ.matches ? 1 : 0, lastT = 0;
+let dm = darkMQ.matches ? 1 : 0, lastT = 0, seenTarget = dm, changedAt = -1;
+const THEME_DELAY = 0.45;                                    // the pages behind her reload ~0.35 s after a theme change, so she waits and changes with them
 function stepTheme(t) {
   const target = darkMQ.matches ? 1 : 0, dt = Math.max(0, Math.min(0.1, t - lastT)); lastT = t;
-  dm += (target - dm) * (1 - Math.exp(-dt / 0.22));
+  if (target !== seenTarget) { seenTarget = target; changedAt = t; }
+  if (t - changedAt < THEME_DELAY) return;                   // hold the old lighting until the page is about to change
+  dm += (target - dm) * (1 - Math.exp(-dt / 0.24));
   if (Math.abs(target - dm) < 0.002) dm = target;
 }
 
@@ -233,8 +236,10 @@ function frame(t) {
   const br = 1 + Math.sin(t * 1.8) * 0.0045;                 // slow breathing, anchored at the floor
   ctx.save(); ctx.translate(cx, floor); ctx.scale(1, br); ctx.translate(-cx, -floor);
   const top = floor + 3 - DISPLAY_H;
-  if (lm < 0.999) { ctx.globalAlpha = 1 - lm; ctx.drawImage(img, PAD_X, top, iw, DISPLAY_H); ctx.globalAlpha = 1; }     // the photo as shot
-  if (lm > 0.001) { ctx.globalAlpha = lm; ctx.drawImage(lifted, PAD_X, top, iw, DISPLAY_H); ctx.globalAlpha = 1; }       // with fill light, on light pages
+  // Cross-fade the photo as shot into the version with fill light. The base is drawn fully opaque and the lifted copy is laid over it,
+  // so she never goes see-through half-way (drawing both at partial alpha made her flash lighter during the switch).
+  if (lm < 0.999) ctx.drawImage(img, PAD_X, top, iw, DISPLAY_H);
+  if (lm > 0.001) { ctx.globalAlpha = lm; ctx.drawImage(lifted, PAD_X, top, iw, DISPLAY_H); ctx.globalAlpha = 1; }
   ctx.globalCompositeOperation = 'source-atop';
   if (lm > 0.001) {                                           // sky light from the upper left: a soft rim on her head, ears, back and shoulder
     const rg = ctx.createRadialGradient(PAD_X + iw * 0.22, top + DISPLAY_H * 0.1, 2, PAD_X + iw * 0.22, top + DISPLAY_H * 0.1, DISPLAY_H * 0.62);
