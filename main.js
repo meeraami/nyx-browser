@@ -502,13 +502,24 @@ function contextMenu(wc, p) {
 }
 
 // ---------- settings ----------
+// Some sites (Google, for one) only read the colour scheme when they load, so reload every open web page once the new theme is in effect.
+function reloadWebPages() {
+  setTimeout(() => {
+    const views = [...tabs.map(t => t.view), ...Object.values(siteViews)];
+    for (const v of views) {
+      const wc = v && v.webContents;
+      if (wc && !wc.isDestroyed() && isWeb(wc.getURL())) wc.reload();
+    }
+  }, 200);
+}
+
 function setSetting(key, value) {
   switch (key) {
     case 'homePage': { const u = toUrl(value); if (!u || !/^(https?|file):/.test(u) || u.startsWith(engine().url)) return false; settings.homePage = u; break; }
     case 'searchEngine': if (!SEARCH[value]) return false; settings.searchEngine = value; break;
     case 'startup': if (!['restore', 'home'].includes(value)) return false; settings.startup = value; break;
     case 'showBookmarksBar': settings.showBookmarksBar = !!value; layout(); break;
-    case 'theme': if (!['dark', 'light', 'system'].includes(value)) return false; settings.theme = value; nativeTheme.themeSource = value; break;
+    case 'theme': if (!['dark', 'light', 'system'].includes(value)) return false; settings.theme = value; nativeTheme.themeSource = value; reloadWebPages(); break;
     case 'askDownload': settings.askDownload = !!value; break;
     default: return false;
   }
@@ -644,7 +655,6 @@ ipcMain.on('site:menu', (_e, id) => {
 ipcMain.on('theme:cycle', () => {
   const order = ['dark', 'light', 'system'];
   setSetting('theme', order[(order.indexOf(settings.theme) + 1) % order.length]);
-  const wc = activeWc(); if (wc && isWeb(wc.getURL())) wc.reload(); // some sites only read the theme on load
 });
 
 ipcMain.on('menu:open', (_e, pos) => {
