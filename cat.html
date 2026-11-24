@@ -181,7 +181,8 @@ function frame(t) {
   ctx.globalCompositeOperation = 'source-over';
   // 3) tight contact shadow drawn over the paws' bottom edge: this is what makes her sit on the ground
   pool(cx, floor + 1, iw * 0.5, 4.5, Math.min(0.97, 0.85 * (1.15 - 0.15 * dm)));
-  pool(cx - iw * 0.18, floor + 1, iw * 0.24, 3.5, 0.6 * (1.2 - 0.2 * dm));
+  pool(cx - iw * 0.22, floor + 1, iw * 0.3, 4, 0.65 * (1.2 - 0.2 * dm));
+  pool(cx + iw * 0.3, floor + 1, iw * 0.2, 3.5, 0.5 * (1.2 - 0.2 * dm));
   // blink: a feathered, fur-coloured eyelid closes over each eye
   const b = (t + 1.5) % 5.6;
   let closed = 0;
