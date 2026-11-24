@@ -809,8 +809,9 @@ app.whenReady().then(() => {
   ses.setUserAgent(`Mozilla/5.0 (${osUA}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`);
   setupDownloads();
   // Chromium sends a stale Sec-CH-Prefers-Color-Scheme hint (one theme change behind), so Google renders the wrong theme.
-  // Always send the real current value so server-rendered pages match the theme straight away.
-  ses.webRequest.onBeforeSendHeaders((d, cb) => {
+  // Send the real current value, but ONLY on Google's page loads. Rewriting every request's headers broke other sites:
+  // WhatsApp's live WebSocket connection lost its handshake key and stopped working, so chats would not open.
+  ses.webRequest.onBeforeSendHeaders({ urls: ['https://*.google.com/*'], types: ['mainFrame', 'subFrame'] }, (d, cb) => {
     d.requestHeaders['Sec-CH-Prefers-Color-Scheme'] = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
     cb({ requestHeaders: d.requestHeaders });
   });
