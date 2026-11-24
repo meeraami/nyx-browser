@@ -804,9 +804,9 @@ if (process.platform === 'win32') app.setAppUserModelId('Nyx');
 
 app.whenReady().then(() => {
   ses = session.fromPartition(PARTITION);
-  // Present as plain Chrome so sites (WhatsApp) don't reject us.
-  const osUA = process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7' : 'Windows NT 10.0; Win64; x64';
-  ses.setUserAgent(`Mozilla/5.0 (${osUA}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`);
+  // Present as plain Chrome so sites (WhatsApp) don't reject us. This stays a Windows Chrome string on every OS, as in the original:
+  // with a Macintosh string WhatsApp Web starts nagging "Get WhatsApp for Mac" and chats would not open.
+  ses.setUserAgent(`Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36`);
   setupDownloads();
   // Chromium sends a stale Sec-CH-Prefers-Color-Scheme hint (one theme change behind), so Google renders the wrong theme.
   // Send the real current value, but ONLY on Google's page loads. Rewriting every request's headers broke other sites:
