@@ -20,8 +20,9 @@ const smooth = u => u * u * (3 - 2 * u);
 // where the eyes are in cat.png (pixels), used to draw the eyelids for blinking
 const EYES = [{ x: 174, y: 150 }, { x: 265, y: 148 }], EYE_RX = 21, EYE_RY = 13;
 
+const darkMQ = matchMedia('(prefers-color-scheme: dark)');   // the overlay follows the browser's theme setting
 const img = new Image();
-let ready = false, S = 1, PAD_X = 96, PAD_R = 24, PAD_B = 22, W = 0, H = 0, readyResolve;   // PAD_X leaves room on the left for her tail
+let ready = false, S = 1, PAD_X = 96, PAD_R = 70, PAD_B = 22, W = 0, H = 0, readyResolve;   // PAD_X leaves room on the left for her tail
 const loaded = new Promise(r => (readyResolve = r));
 img.onload = () => {
   S = DISPLAY_H / img.naturalHeight;
@@ -107,12 +108,24 @@ function frame(t) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const floor = H - PAD_B + 4, iw = img.naturalWidth * S, cx = PAD_X + iw / 2;
-  pool(cx, floor + 3, iw * 0.78, 13, 0.5);                   // wide soft shadow
-  pool(cx, floor - 1, iw * 0.5, 6, 0.8);                     // tight contact shadow under the paws
+  const dark = darkMQ.matches, k = dark ? 1 : 1.55;           // on a light page the shadow has to carry more weight
+  // 1) wide soft pool plus a cast shadow thrown to the right (light from the upper left)
+  pool(cx, floor - 1, iw * 0.9, 14, Math.min(0.95, 0.5 * k));
+  pool(cx + iw * 0.12, floor, iw * 0.78, 9, Math.min(0.95, 0.4 * k));
   tail(t, floor);                                            // behind her, so the haunch covers its base
+  // 2) the cat, with her paws pressed a few pixels into the shadow
   const br = 1 + Math.sin(t * 1.8) * 0.0045;                 // slow breathing, anchored at the floor
   ctx.save(); ctx.translate(cx, floor); ctx.scale(1, br); ctx.translate(-cx, -floor);
-  ctx.drawImage(img, PAD_X, floor - DISPLAY_H, iw, DISPLAY_H);
+  ctx.drawImage(img, PAD_X, floor + 3 - DISPLAY_H, iw, DISPLAY_H);
+  // darken the lowest part of her body, so the paws sink into the floor instead of hovering above it
+  ctx.globalCompositeOperation = 'source-atop';
+  const og = ctx.createLinearGradient(0, floor - 26, 0, floor + 4);
+  og.addColorStop(0, 'rgba(0,0,0,0)'); og.addColorStop(1, `rgba(0,0,0,${dark ? 0.55 : 0.7})`);
+  ctx.fillStyle = og; ctx.fillRect(0, floor - 26, W, 36);
+  ctx.globalCompositeOperation = 'source-over';
+  // 3) tight contact shadow drawn over the paws' bottom edge: this is what makes her sit on the ground
+  pool(cx, floor + 1, iw * 0.5, 6.5, Math.min(0.97, 0.85 * (dark ? 1 : 1.15)));
+  pool(cx - iw * 0.18, floor + 1, iw * 0.24, 5, 0.6 * (dark ? 1 : 1.2));
   // blink: a feathered, fur-coloured eyelid closes over each eye
   const b = (t + 1.5) % 5.6;
   let closed = 0;

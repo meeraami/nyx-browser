@@ -517,15 +517,15 @@ function reloadWebPages() {
 
 // ---------- the cat ----------
 // Pages cover Nyx's own UI, so she lives in a transparent, click-through child window over the bottom-left of the main window.
-// She is there while the browser is in dark mode (a black cat of the night), bounds away when it goes light, and comes back for dark.
+// She rests there in both themes, and leaves only if the Cat option is switched off.
 let catWin = null, catState = 'none';                        // 'none' | 'in' | 'leaving'
-const CAT_W = 260, CAT_H = 200;
+const CAT_W = 300, CAT_H = 200;
 
 function catBounds() {
   const b = win.getContentBounds();
   return { x: b.x, y: b.y + b.height - CAT_H, width: Math.min(CAT_W, b.width), height: CAT_H };
 }
-function catWanted() { return !!(settings.cat && win && !win.isDestroyed() && nativeTheme.shouldUseDarkColors); }
+function catWanted() { return !!(settings.cat && win && !win.isDestroyed()); }    // she stays in both themes
 
 function syncCat() {
   if (!win || win.isDestroyed()) return;
@@ -723,7 +723,7 @@ ipcMain.on('menu:open', (_e, pos) => {
     ] },
     label('History', 'Ctrl+H', { click: () => openInternal('history') }),
     label('Downloads', 'Ctrl+J', { click: () => openInternal('downloads') }),
-    { label: 'Cat 🐈‍⬛ (visits in dark mode)', type: 'checkbox', checked: !!settings.cat, click: () => setSetting('cat', !settings.cat) },
+    { label: 'Cat 🐈‍⬛', type: 'checkbox', checked: !!settings.cat, click: () => setSetting('cat', !settings.cat) },
     { label: 'Theme (websites)', submenu: ['dark', 'light', 'system'].map(t => ({ label: t[0].toUpperCase() + t.slice(1), type: 'radio', checked: settings.theme === t, click: () => setSetting('theme', t) })) },
     { type: 'separator' },
     label('Settings', '', { click: () => openInternal('settings') }),
