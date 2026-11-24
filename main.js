@@ -183,6 +183,7 @@ function pushState() {
     bookmarkable: isWeb(url),
     bookmarked: !!bookmarks.find(b => b.url === url),
     theme: settings.theme,
+    themeDark: nativeTheme.shouldUseDarkColors,
     bookmarks: bookmarks.map(b => ({ id: b.id, title: b.title, favicon: b.favicon })),
     showBar: settings.showBookmarksBar,
     find: { ...find },
@@ -508,9 +509,9 @@ function reloadWebPages() {
     const views = [...tabs.map(t => t.view), ...Object.values(siteViews)];
     for (const v of views) {
       const wc = v && v.webContents;
-      if (wc && !wc.isDestroyed() && isWeb(wc.getURL())) wc.reload();
+      if (wc && !wc.isDestroyed() && isWeb(wc.getURL())) wc.reloadIgnoringCache(); // bypass cache: Google varies its page on the colour-scheme hint
     }
-  }, 200);
+  }, 350);
 }
 
 function setSetting(key, value) {
@@ -652,10 +653,8 @@ ipcMain.on('site:menu', (_e, id) => {
 });
 
 // The ⋮ menu.
-ipcMain.on('theme:cycle', () => {
-  const order = ['dark', 'light', 'system'];
-  setSetting('theme', order[(order.indexOf(settings.theme) + 1) % order.length]);
-});
+// Toolbar button: flip between dark and light ("system" stays available in the menu and settings).
+ipcMain.on('theme:cycle', () => setSetting('theme', nativeTheme.shouldUseDarkColors ? 'light' : 'dark'));
 
 ipcMain.on('menu:open', (_e, pos) => {
   const wc = activeWc();

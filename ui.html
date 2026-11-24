@@ -95,7 +95,7 @@
         <button id="star" title="Bookmark this page (Ctrl+D)">&#9734;</button>
       </div>
       <button id="zoompill" title="Reset zoom (Ctrl+0)">100%</button>
-      <button class="tb" id="theme" title="Website theme">&#9790;</button>
+      <button class="tb" id="theme" title="Website theme">&#9728;</button>
       <button class="tb" id="dl" title="Downloads (Ctrl+J)">&#11015;<span class="ring"><div></div></span></button>
       <button class="tb" id="menu" title="Menu">&#8942;</button>
     </div>
@@ -166,8 +166,9 @@
       $('star').classList.toggle('on', s.bookmarked);
       $('star').innerHTML = s.bookmarked ? '&#9733;' : '&#9734;';
       $('star').title = s.bookmarked ? 'Remove bookmark (Ctrl+D)' : 'Bookmark this page (Ctrl+D)';
-      const th = { dark: ['\u263E', 'Dark'], light: ['\u2600', 'Light'], system: ['\u25D1', 'System'] }[s.theme] || ['\u263E', 'Dark'];
-      $('theme').textContent = th[0]; $('theme').title = `Website theme: ${th[1]} (click to switch)`;
+      // Shows the mode you'll switch TO: sun while dark, moon while light.
+      $('theme').textContent = s.themeDark ? '\u2600' : '\u263E';
+      $('theme').title = s.themeDark ? 'Switch websites to light theme' : 'Switch websites to dark theme';
       $('zoompill').style.display = s.zoom !== 100 ? 'block' : 'none';
       $('zoompill').textContent = s.zoom + '%';
       const dl = $('dl');
