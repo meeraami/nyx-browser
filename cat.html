@@ -3,7 +3,7 @@
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
   #stage { position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; overflow: hidden; }
-  canvas { position: absolute; bottom: 0; left: -24px; display: block; opacity: 0; transform-origin: 50% 100%; }
+  canvas { position: absolute; bottom: 0; left: -44px; display: block; opacity: 0; transform-origin: 50% 100%; }
 </style>
 <div id="stage"><canvas id="c"></canvas></div>
 <script>
@@ -22,7 +22,7 @@ const EYES = [{ x: 174, y: 150 }, { x: 265, y: 148 }], EYE_RX = 21, EYE_RY = 13;
 
 const darkMQ = matchMedia('(prefers-color-scheme: dark)');   // the overlay follows the browser's theme setting
 const img = new Image();
-let ready = false, S = 1, PAD_X = 96, PAD_R = 70, PAD_B = 22, W = 0, H = 0, readyResolve;   // PAD_X leaves room on the left for her tail
+let ready = false, S = 1, PAD_X = 160, PAD_R = 70, PAD_B = 22, W = 0, H = 0, readyResolve;   // PAD_X leaves room on the left for her tail
 const loaded = new Promise(r => (readyResolve = r));
 img.onload = () => {
   S = DISPLAY_H / img.naturalHeight;
@@ -44,12 +44,12 @@ function pool(cx, cy, rx, ry, a) {                           // soft elliptical 
 // A glossy black tail that matches her coat. The photo hides her real one, so this lies along the floor behind her haunch and wags.
 const tailSeed = Array.from({ length: 1200 }, (_, i) => { let x = Math.sin(i * 12.9898) * 43758.5453; return x - Math.floor(x); });
 function tail(t, floor) {
-  const N = 16, L = 5.4, wag = 1;
+  const N = 24, L = 5.6, wag = 1;
   let x = PAD_X + 84 * S, y = floor - 92 * S, a = Math.PI - 0.5;                     // starts behind the haunch, heading left and down to the floor
   const pts = [{ x, y }], widths = [15];
   for (let i = 0; i < N; i++) {
-    const curl = i < 5 ? 0.075 : 0.105;                                                  // eases down onto the floor, then the tip rises
-    a += curl + Math.sin(t * 3.4 - i * 0.4) * 0.19 * wag * (0.12 + i / N);            // the wag runs up the tail as a wave
+    const curl = i < 5 ? 0.075 : i < 15 ? 0.012 : 0.11;                                  // eases down onto the floor, runs along it, then the tip lifts
+    a += curl + Math.sin(t * 3.2 - i * 0.26) * 0.15 * wag * (0.1 + i / N);            // the wag runs up the tail as a wave
     x += Math.cos(a) * L; y = Math.min(floor - 0.5, y + Math.sin(a) * L); pts.push({ x, y }); widths.push(15 + 4.5 * Math.sin(Math.PI * Math.min(1, (i + 1) / (N * 0.8))) - (i / N) * 6);
   }
   const n = pts.length, Lp = [], Rp = [];
