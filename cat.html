@@ -63,17 +63,18 @@ function tail(t, floor) {
   const ring = [...Lp, tip, ...Rp.reverse()];
   ctx.save();
   pool(pts[Math.floor(n / 2)].x, floor + 1, 40, 4, 0.45);                              // contact shadow under the tail
-  ctx.save(); ctx.filter = 'blur(2.6px)'; ctx.strokeStyle = 'rgba(6,6,9,0.5)'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (let i = 0; i < n - 1; i++) { ctx.lineWidth = widths[i] + 6; ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[i + 1].x, pts[i + 1].y); ctx.stroke(); }
+  const dk = darkMQ.matches;
+  ctx.save(); ctx.filter = dk ? 'blur(2.6px)' : 'blur(1.4px)'; ctx.strokeStyle = dk ? 'rgba(6,6,9,0.5)' : 'rgba(6,6,9,0.32)'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (let i = 0; i < n - 1; i++) { ctx.lineWidth = widths[i] + (dk ? 6 : 3.5); ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[i + 1].x, pts[i + 1].y); ctx.stroke(); }
   ctx.restore();                                                                       // (the halo above makes the outline fuzzy)
-  ctx.filter = 'blur(0.8px)';                                                         // as soft as the photograph
+  ctx.filter = dk ? 'blur(0.8px)' : 'blur(0.55px)';                                      // as soft as the photograph, but crisper on a light page
   ctx.beginPath(); ctx.moveTo((ring[0].x + ring[1].x) / 2, (ring[0].y + ring[1].y) / 2);
   for (let i = 1; i < ring.length; i++) { const p = ring[i], q2 = ring[(i + 1) % ring.length]; ctx.quadraticCurveTo(p.x, p.y, (p.x + q2.x) / 2, (p.y + q2.y) / 2); }
   ctx.closePath();
   const g = ctx.createLinearGradient(0, floor - 40, 0, floor);
   g.addColorStop(0, '#16161a'); g.addColorStop(0.5, '#08080b'); g.addColorStop(1, '#030304');
   ctx.fillStyle = g; ctx.fill();
-  ctx.strokeStyle = 'rgba(140,150,176,0.16)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';   // sheen along the top edge, like the coat
+  ctx.strokeStyle = dk ? 'rgba(140,150,176,0.16)' : 'rgba(140,150,176,0.07)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';   // sheen along the top edge, like the coat
   ctx.beginPath(); ctx.moveTo(Lp[1].x, Lp[1].y); for (let i = 2; i < n; i++) ctx.lineTo(Lp[i].x, Lp[i].y); ctx.stroke();
   // fluff: many fine, short strands lying along the tail (swept towards the tip), a soft tuft at the end
   ctx.lineCap = 'round';
@@ -83,14 +84,14 @@ function tail(t, floor) {
     const a2 = ang + (sd ? -1 : 1) * (0.3 + r(0) * 0.55), len = (2.6 + r(2) * 4.2) * (0.75 + 0.45 * widths[i] / 15);
     const along = (k - 3.5) * 0.9, inset = r(1) * 3;                                    // spread along the segment, some start inside the edge
     const sx = p.x + Math.cos(ang) * along - Math.cos(ang + (sd ? -Math.PI / 2 : Math.PI / 2)) * inset, sy = p.y + Math.sin(ang) * along - Math.sin(ang + (sd ? -Math.PI / 2 : Math.PI / 2)) * inset;
-    ctx.strokeStyle = r(1) < 0.22 ? 'rgba(150,160,185,0.2)' : 'rgba(6,6,9,0.6)';
+    ctx.strokeStyle = r(1) < 0.22 ? `rgba(150,160,185,${dk ? 0.2 : 0.05})` : 'rgba(6,6,9,0.62)';
     ctx.lineWidth = 0.45 + r(2) * 0.4;
     ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(a2) * len, sy + Math.sin(a2) * len); ctx.stroke();
   }
   for (let k = 0; k < 28; k++) {                                                       // a soft plume at the tip
     const r = j => tailSeed[(700 + k * 5 + j) % 1200], t0 = pts[n - 1];
     const a3 = a + (r(0) - 0.5) * 1.5, len = 3 + r(1) * 6, off = (r(2) - 0.5) * 6;
-    ctx.strokeStyle = r(3) < 0.2 ? 'rgba(150,160,185,0.18)' : 'rgba(6,6,9,0.6)'; ctx.lineWidth = 0.5 + r(4) * 0.4;
+    ctx.strokeStyle = r(3) < 0.2 ? `rgba(150,160,185,${dk ? 0.18 : 0.05})` : 'rgba(6,6,9,0.62)'; ctx.lineWidth = 0.5 + r(4) * 0.4;
     ctx.beginPath(); ctx.moveTo(t0.x - Math.sin(a) * off, t0.y + Math.cos(a) * off); ctx.lineTo(t0.x - Math.sin(a) * off + Math.cos(a3) * len, t0.y + Math.cos(a) * off + Math.sin(a3) * len); ctx.stroke();
   }
   ctx.strokeStyle = 'rgba(140,150,176,0.09)'; ctx.lineWidth = 0.5;                    // fine fur texture inside the tail
