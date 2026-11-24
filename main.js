@@ -185,6 +185,7 @@ function pushState() {
     bookmarked: !!bookmarks.find(b => b.url === url),
     theme: settings.theme,
     themeDark: nativeTheme.shouldUseDarkColors,
+    cat: !!settings.cat,
     bookmarks: bookmarks.map(b => ({ id: b.id, title: b.title, favicon: b.favicon })),
     showBar: settings.showBookmarksBar,
     find: { ...find },
@@ -695,6 +696,7 @@ ipcMain.on('site:menu', (_e, id) => {
 
 // The ⋮ menu.
 // Toolbar button: flip between dark and light ("system" stays available in the menu and settings).
+ipcMain.on('cat:toggle', () => setSetting('cat', !settings.cat));
 ipcMain.on('theme:cycle', () => setSetting('theme', nativeTheme.shouldUseDarkColors ? 'light' : 'dark'));
 
 ipcMain.on('menu:open', (_e, pos) => {
