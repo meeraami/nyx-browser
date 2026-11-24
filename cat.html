@@ -43,8 +43,16 @@ function pool(cx, cy, rx, ry, a) {                           // soft elliptical 
 
 // A glossy black tail that matches her coat. The photo hides her real one, so this lies along the floor behind her haunch and wags.
 const tailSeed = Array.from({ length: 1200 }, (_, i) => { let x = Math.sin(i * 12.9898) * 43758.5453; return x - Math.floor(x); });
+// "how dark" the page is, eased over about half a second so every theme-dependent detail blends instead of switching in one frame
+let dm = darkMQ.matches ? 1 : 0, lastT = 0;
+function stepTheme(t) {
+  const target = darkMQ.matches ? 1 : 0, dt = Math.max(0, Math.min(0.1, t - lastT)); lastT = t;
+  dm += (target - dm) * (1 - Math.exp(-dt / 0.22));
+  if (Math.abs(target - dm) < 0.002) dm = target;
+}
+
 function tail(t, floor) {
-  const KS = DISPLAY_H / 150, N = 20, L = 5.2 * KS, wag = 1, wf = darkMQ.matches ? 1 : 0.9;
+  const KS = DISPLAY_H / 150, N = 20, L = 5.2 * KS, wag = 1, wf = 1 - 0.1 * (1 - dm);
   let x = PAD_X + 84 * S, y = floor - 92 * S, a = Math.PI - 0.5;                     // starts behind the haunch, heading left and down to the floor
   const pts = [{ x, y }], widths = [15 * KS * wf];
   for (let i = 0; i < N; i++) {
@@ -61,13 +69,18 @@ function tail(t, floor) {
   }
   const tip = { x: pts[n - 1].x + Math.cos(a) * 2.4, y: pts[n - 1].y + Math.sin(a) * 2.4 };
   const ring = [...Lp, tip, ...Rp.reverse()];
+  const darkOn = dm > 0.004, lightOn = dm < 0.996;
+  const tangent = i => Math.atan2(pts[Math.min(n - 1, i + 1)].y - pts[Math.max(0, i - 1)].y, pts[Math.min(n - 1, i + 1)].x - pts[Math.max(0, i - 1)].x);
   ctx.save();
   pool(pts[Math.floor(n / 2)].x, floor + 1, 40, 4, 0.45);                              // contact shadow under the tail
-  const dk = darkMQ.matches;
-  if (dk) { ctx.save(); ctx.filter = 'blur(2.6px)'; ctx.strokeStyle = dk ? 'rgba(6,6,9,0.5)' : 'rgba(6,6,9,0.22)'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (let i = 0; i < n - 1; i++) { ctx.lineWidth = widths[i] + (dk ? 6 : 2.6); ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[i + 1].x, pts[i + 1].y); ctx.stroke(); }
-  ctx.restore(); }                                                                     // (the halo above makes the outline fuzzy; dark pages only)
-  if (!dk) {                                                                           // light page: stacked, slightly wider, blurred copies give a gradual, irregular fur falloff
+
+  // two styles of fluffy edge, cross-faded by `dm`: a soft halo for dark pages, a layered fur falloff for light ones
+  if (darkOn) {
+    ctx.save(); ctx.globalAlpha = dm; ctx.filter = 'blur(2.6px)'; ctx.strokeStyle = 'rgba(6,6,9,0.5)'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let i = 0; i < n - 1; i++) { ctx.lineWidth = widths[i] + 6; ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[i + 1].x, pts[i + 1].y); ctx.stroke(); }
+    ctx.restore();
+  }
+  if (lightOn) {
     const polyPath = wArr => {
       const A = [], B = [];
       for (let i = 0; i < n; i++) {
@@ -80,58 +93,68 @@ function tail(t, floor) {
       for (let i = 1; i < r2.length; i++) { const p = r2[i], q3 = r2[(i + 1) % r2.length]; ctx.quadraticCurveTo(p.x, p.y, (p.x + q3.x) / 2, (p.y + q3.y) / 2); }
       ctx.closePath();
     };
-    ctx.filter = 'blur(0.8px)'; ctx.fillStyle = 'rgba(6,6,9,0.15)';
+    ctx.save(); ctx.globalAlpha = 1 - dm; ctx.filter = 'blur(0.8px)'; ctx.fillStyle = 'rgba(6,6,9,0.15)';
     for (let Ly = 0; Ly < 7; Ly++) { polyPath(widths.map((w, i) => w / wf * (1 + 0.035 * (Ly + 1)) * (1 + (tailSeed[(i * 7 + Ly * 13) % 1200] - 0.5) * 0.1))); ctx.fill(); }
+    ctx.restore();
   }
-  ctx.filter = dk ? 'blur(0.8px)' : 'blur(0.5px)';                                      // as soft as the photograph, but crisper on a light page
+
+  // the tail itself
+  ctx.filter = `blur(${(0.5 + 0.3 * dm).toFixed(2)}px)`;                               // as soft as the photograph, crisper on a light page
   ctx.beginPath(); ctx.moveTo((ring[0].x + ring[1].x) / 2, (ring[0].y + ring[1].y) / 2);
   for (let i = 1; i < ring.length; i++) { const p = ring[i], q2 = ring[(i + 1) % ring.length]; ctx.quadraticCurveTo(p.x, p.y, (p.x + q2.x) / 2, (p.y + q2.y) / 2); }
   ctx.closePath();
   const g = ctx.createLinearGradient(0, floor - 40, 0, floor);
   g.addColorStop(0, '#16161a'); g.addColorStop(0.5, '#08080b'); g.addColorStop(1, '#030304');
   ctx.fillStyle = g; ctx.fill();
-  ctx.strokeStyle = dk ? 'rgba(140,150,176,0.16)' : 'rgba(140,150,176,0.07)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';   // sheen along the top edge, like the coat
+  ctx.strokeStyle = `rgba(140,150,176,${(0.07 + 0.09 * dm).toFixed(3)})`; ctx.lineWidth = 1.6; ctx.lineCap = 'round';   // sheen along the top edge, like the coat
   ctx.beginPath(); ctx.moveTo(Lp[1].x, Lp[1].y); for (let i = 2; i < n; i++) ctx.lineTo(Lp[i].x, Lp[i].y); ctx.stroke();
-  // fluff: many fine, short strands lying along the tail (swept towards the tip), a soft plume at the end.
-  // On a light page dark spikes read like cactus needles, so there they are shorter, finer, fainter and lie closer to the tail.
+
+  // fur details, each style fading in and out with the theme
   ctx.lineCap = 'round';
-  if (!dk) {                                                                           // light page: just a few fine, curved flyaway hairs lying along the tail
-    ctx.filter = 'blur(0.3px)';
+  if (lightOn) {                                                                       // a few fine, curved flyaway hairs lying along the tail
+    ctx.save(); ctx.globalAlpha = 1 - dm; ctx.filter = 'blur(0.3px)';
     for (let k = 0; k < 26; k++) {
       const r = j => tailSeed[(300 + k * 7 + j) % 1200];
       const i = 1 + Math.floor(r(0) * (n - 3)), sd = r(1) < 0.5 ? Lp : Rp, out = sd === Lp ? 1 : -1, p = sd[i];
-      const ang = Math.atan2(pts[i + 1].y - pts[i - 1].y, pts[i + 1].x - pts[i - 1].x), len = (7 + r(2) * 9) * KS, bow = (1 + r(3) * 2.2) * KS * out;
+      const ang = tangent(i), len = (7 + r(2) * 9) * KS, bow = (1 + r(3) * 2.2) * KS * out;
       const ox = Math.cos(ang + Math.PI / 2) * -out, oy = Math.sin(ang + Math.PI / 2) * -out;
       const ex = p.x + Math.cos(ang) * len + ox * 1.2 * KS * r(2), ey = p.y + Math.sin(ang) * len + oy * 1.2 * KS * r(2);
       ctx.strokeStyle = `rgba(6,6,9,${0.22 + 0.2 * r(4)})`; ctx.lineWidth = 0.45;
       ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.quadraticCurveTo((p.x + ex) / 2 + ox * bow, (p.y + ey) / 2 + oy * bow, ex, ey); ctx.stroke();
     }
-    ctx.filter = 'none';
+    ctx.restore();
   }
-  const sweepMin = dk ? 0.3 : 0.14, sweepVar = dk ? 0.55 : 0.32, lenK = dk ? 1 : 0.72, aDark = dk ? 0.62 : 0.4, wMin = dk ? 0.45 : 0.32, wVar = dk ? 0.4 : 0.22;
-  if (dk) for (let i = 1; i < n; i++) for (let sd = 0; sd < 2; sd++) for (let k = 0; k < 8; k++) {
-    const r = j => tailSeed[(i * 48 + sd * 24 + k * 3 + j) % 1200];
-    const p = (sd ? Rp : Lp)[i], ang = Math.atan2(pts[Math.min(n - 1, i + 1)].y - pts[i - 1].y, pts[Math.min(n - 1, i + 1)].x - pts[i - 1].x);
-    const a2 = ang + (sd ? -1 : 1) * (sweepMin + r(0) * sweepVar), len = (2.6 + r(2) * 4.2) * (0.75 + 0.45 * widths[i] / (15 * KS * wf)) * KS * lenK;
-    const along = (k - 3.5) * 0.9, inset = r(1) * 3 * KS;
-    const sx = p.x + Math.cos(ang) * along - Math.cos(ang + (sd ? -Math.PI / 2 : Math.PI / 2)) * inset, sy = p.y + Math.sin(ang) * along - Math.sin(ang + (sd ? -Math.PI / 2 : Math.PI / 2)) * inset;
-    ctx.strokeStyle = r(1) < 0.22 ? `rgba(150,160,185,${dk ? 0.2 : 0.04})` : `rgba(6,6,9,${aDark})`;
-    ctx.lineWidth = wMin + r(2) * wVar;
-    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(a2) * len, sy + Math.sin(a2) * len); ctx.stroke();
+  if (darkOn) {                                                                        // many fine strands swept towards the tip, a bushy plume, a little fur texture
+    ctx.save(); ctx.globalAlpha = dm;
+    for (let i = 1; i < n; i++) for (let sd = 0; sd < 2; sd++) for (let k = 0; k < 8; k++) {
+      const r = j => tailSeed[(i * 48 + sd * 24 + k * 3 + j) % 1200];
+      const p = (sd ? Rp : Lp)[i], ang = tangent(i);
+      const a2 = ang + (sd ? -1 : 1) * (0.3 + r(0) * 0.55), len = (2.6 + r(2) * 4.2) * (0.75 + 0.45 * widths[i] / (15 * KS * wf)) * KS;
+      const along = (k - 3.5) * 0.9, inset = r(1) * 3 * KS, inward = ang + (sd ? -Math.PI / 2 : Math.PI / 2);
+      const sx = p.x + Math.cos(ang) * along - Math.cos(inward) * inset, sy = p.y + Math.sin(ang) * along - Math.sin(inward) * inset;
+      ctx.strokeStyle = r(1) < 0.22 ? 'rgba(150,160,185,0.2)' : 'rgba(6,6,9,0.62)'; ctx.lineWidth = 0.45 + r(2) * 0.4;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(a2) * len, sy + Math.sin(a2) * len); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(140,150,176,0.09)'; ctx.lineWidth = 0.5;
+    for (let i = 1; i < n - 1; i++) for (let k = 0; k < 4; k++) {
+      const r = j => tailSeed[(i * 12 + k * 3 + j + 450) % 1200], p0 = pts[i], off = (r(0) - 0.5) * widths[i] * 0.75, ang = tangent(i);
+      const cx0 = p0.x - Math.sin(ang) * off, cy0 = p0.y + Math.cos(ang) * off;
+      ctx.beginPath(); ctx.moveTo(cx0, cy0); ctx.lineTo(cx0 + Math.cos(ang) * 4, cy0 + Math.sin(ang) * 4); ctx.stroke();
+    }
+    ctx.restore();
   }
-  for (let k = 0; k < (dk ? 28 : 8); k++) {                                            // a soft plume at the tip
-    const r = j => tailSeed[(700 + k * 5 + j) % 1200], t0 = pts[n - 1];
-    const a3 = a + (r(0) - 0.5) * (dk ? 1.5 : 0.7), len = (3 + r(1) * 5) * KS * (dk ? 1 : 0.8), off = (r(2) - 0.5) * (dk ? 6 : 5) * KS;
-    ctx.strokeStyle = r(3) < 0.2 ? `rgba(150,160,185,${dk ? 0.18 : 0.04})` : `rgba(6,6,9,${dk ? 0.62 : 0.3})`; ctx.lineWidth = (0.5 + r(4) * 0.4) * (dk ? 1 : 0.7);
-    ctx.beginPath(); ctx.moveTo(t0.x - Math.sin(a) * off, t0.y + Math.cos(a) * off); ctx.lineTo(t0.x - Math.sin(a) * off + Math.cos(a3) * len, t0.y + Math.cos(a) * off + Math.sin(a3) * len); ctx.stroke();
-  }
-  ctx.strokeStyle = 'rgba(140,150,176,0.09)'; ctx.lineWidth = 0.5;                    // fine fur texture inside the tail (dark pages only; on white it reads as dashes)
-  if (dk) for (let i = 1; i < n - 1; i++) for (let k = 0; k < 4; k++) {
-    const r = j => tailSeed[(i * 12 + k * 3 + j + 450) % 1200], p0 = pts[i], off = (r(0) - 0.5) * widths[i] * 0.75;
-    const ang = Math.atan2(pts[i + 1].y - pts[i - 1].y, pts[i + 1].x - pts[i - 1].x);
-    const cx0 = p0.x - Math.sin(ang) * off, cy0 = p0.y + Math.cos(ang) * off;
-    ctx.beginPath(); ctx.moveTo(cx0, cy0); ctx.lineTo(cx0 + Math.cos(ang) * 4, cy0 + Math.sin(ang) * 4); ctx.stroke();
-  }
+  const plume = (isDark, amul) => {                                                    // a soft plume at the tip, bushier on dark pages and lighter on white
+    ctx.save(); ctx.globalAlpha = amul;
+    for (let k = 0; k < (isDark ? 28 : 8); k++) {
+      const r = j => tailSeed[(700 + k * 5 + j) % 1200], t0 = pts[n - 1];
+      const a3 = a + (r(0) - 0.5) * (isDark ? 1.5 : 0.7), len = (3 + r(1) * (isDark ? 6 : 5)) * KS * (isDark ? 1 : 0.8), off = (r(2) - 0.5) * (isDark ? 6 : 5) * KS;
+      ctx.strokeStyle = r(3) < 0.2 ? 'rgba(150,160,185,0.18)' : `rgba(6,6,9,${isDark ? 0.62 : 0.3})`; ctx.lineWidth = (0.5 + r(4) * 0.4) * (isDark ? 1 : 0.7);
+      ctx.beginPath(); ctx.moveTo(t0.x - Math.sin(a) * off, t0.y + Math.cos(a) * off); ctx.lineTo(t0.x - Math.sin(a) * off + Math.cos(a3) * len, t0.y + Math.cos(a) * off + Math.sin(a3) * len); ctx.stroke();
+    }
+    ctx.restore();
+  };
+  if (darkOn) plume(true, dm);
+  if (lightOn) plume(false, 1 - dm);
   ctx.restore();
 }
 
@@ -140,7 +163,8 @@ function frame(t) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const floor = H - PAD_B + 4, iw = img.naturalWidth * S, cx = PAD_X + iw / 2;
-  const dark = darkMQ.matches, k = dark ? 1 : 1.55;           // on a light page the shadow has to carry more weight
+  stepTheme(t);
+  const k = 1.55 - 0.55 * dm;                                // on a light page the shadow has to carry more weight (blended, not switched)
   // 1) wide soft pool plus a cast shadow thrown to the right (light from the upper left)
   pool(cx, floor - 1, iw * 0.9, 14, Math.min(0.95, 0.5 * k));
   pool(cx + iw * 0.12, floor, iw * 0.78, 9, Math.min(0.95, 0.4 * k));
@@ -152,12 +176,12 @@ function frame(t) {
   // darken the lowest part of her body, so the paws sink into the floor instead of hovering above it
   ctx.globalCompositeOperation = 'source-atop';
   const og = ctx.createLinearGradient(0, floor - 26, 0, floor + 4);
-  og.addColorStop(0, 'rgba(0,0,0,0)'); og.addColorStop(1, `rgba(0,0,0,${dark ? 0.55 : 0.7})`);
+  og.addColorStop(0, 'rgba(0,0,0,0)'); og.addColorStop(1, `rgba(0,0,0,${(0.7 - 0.15 * dm).toFixed(3)})`);
   ctx.fillStyle = og; ctx.fillRect(0, floor - 26, W, 36);
   ctx.globalCompositeOperation = 'source-over';
   // 3) tight contact shadow drawn over the paws' bottom edge: this is what makes her sit on the ground
-  pool(cx, floor + 1, iw * 0.5, 6.5, Math.min(0.97, 0.85 * (dark ? 1 : 1.15)));
-  pool(cx - iw * 0.18, floor + 1, iw * 0.24, 5, 0.6 * (dark ? 1 : 1.2));
+  pool(cx, floor + 1, iw * 0.5, 6.5, Math.min(0.97, 0.85 * (1.15 - 0.15 * dm)));
+  pool(cx - iw * 0.18, floor + 1, iw * 0.24, 5, 0.6 * (1.2 - 0.2 * dm));
   // blink: a feathered, fur-coloured eyelid closes over each eye
   const b = (t + 1.5) % 5.6;
   let closed = 0;
