@@ -24,7 +24,18 @@ const darkMQ = matchMedia('(prefers-color-scheme: dark)');   // the overlay foll
 const img = new Image();
 let ready = false, S = 1, PAD_X = 130, PAD_R = 70, PAD_B = 10, W = 0, H = 0, readyResolve;   // PAD_X leaves room on the left for her tail
 const loaded = new Promise(r => (readyResolve = r));
+let lifted = null;
+function makeLifted() {                                       // brighter, cooler shadows: out = in + k * (1 - in/255)^3 per channel
+  const c2 = document.createElement('canvas'); c2.width = img.naturalWidth; c2.height = img.naturalHeight;
+  const g2 = c2.getContext('2d'); g2.drawImage(img, 0, 0);
+  const d = g2.getImageData(0, 0, c2.width, c2.height), px = d.data, K = [11, 14, 21];
+  for (let i = 0; i < px.length; i += 4) {
+    for (let ch = 0; ch < 3; ch++) { const v = px[i + ch] / 255, lift = Math.pow(1 - v, 4) * K[ch]; px[i + ch] = Math.min(255, px[i + ch] + lift); }
+  }
+  g2.putImageData(d, 0, 0); lifted = c2;
+}
 img.onload = () => {
+  makeLifted();
   S = DISPLAY_H / img.naturalHeight;
   W = Math.round(img.naturalWidth * S + PAD_X + PAD_R); H = Math.round(DISPLAY_H + PAD_B + 6);
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
@@ -34,9 +45,9 @@ img.onload = () => {
 img.onerror = () => { ready = false; readyResolve(); };
 img.src = 'cat.png';
 
-function pool(cx, cy, rx, ry, a) {                           // soft elliptical shadow on the floor
+function pool(cx, cy, rx, ry, a, col = '0,0,0') {                // soft elliptical shadow on the floor
   const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, rx);
-  g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(0.55, `rgba(0,0,0,${a * 0.4})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+  g.addColorStop(0, `rgba(${col},${a})`); g.addColorStop(0.55, `rgba(${col},${a * 0.4})`); g.addColorStop(1, `rgba(${col},0)`);
   ctx.save(); ctx.translate(cx, cy); ctx.scale(1, ry / rx); ctx.translate(-cx, -cy);
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rx, 0, Math.PI * 2); ctx.fill(); ctx.restore();
 }
@@ -211,26 +222,38 @@ function frame(t) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const floor = H - PAD_B + 4, iw = img.naturalWidth * S, cx = PAD_X + iw / 2;
   stepTheme(t);
-  const k = 1.55 - 0.55 * dm;                                // on a light page the shadow has to carry more weight (blended, not switched)
+  const lm = 1 - dm;                                          // how light the page is (eased)
+  const k = 1.35 - 0.35 * dm;                                // on a light page the shadow has to carry more weight (blended, not switched)
+  const sc = `${Math.round(30 * lm)},${Math.round(36 * lm)},${Math.round(54 * lm)}`;   // cool, slightly blue shadow on light pages, pure black on dark
   // 1) wide soft pool plus a cast shadow thrown to the right (light from the upper left)
-  pool(cx, floor - 1, iw * 0.9, 7, Math.min(0.95, 0.5 * k));
-  pool(cx + iw * 0.12, floor, iw * 0.78, 5, Math.min(0.95, 0.4 * k));
+  pool(cx, floor - 1, iw * 1.0, 7, Math.min(0.9, 0.5 * k), sc);
+  pool(cx + iw * 0.14, floor, iw * 0.85, 5, Math.min(0.9, 0.38 * k), sc);
   tail(t, floor);                                            // behind her, so the haunch covers its base
   // 2) the cat, with her paws pressed a few pixels into the shadow
   const br = 1 + Math.sin(t * 1.8) * 0.0045;                 // slow breathing, anchored at the floor
   ctx.save(); ctx.translate(cx, floor); ctx.scale(1, br); ctx.translate(-cx, -floor);
-  ctx.drawImage(img, PAD_X, floor + 3 - DISPLAY_H, iw, DISPLAY_H);
-  // darken the lowest part of her body, so the paws sink into the floor instead of hovering above it
+  const top = floor + 3 - DISPLAY_H;
+  if (lm < 0.999) { ctx.globalAlpha = 1 - lm; ctx.drawImage(img, PAD_X, top, iw, DISPLAY_H); ctx.globalAlpha = 1; }     // the photo as shot
+  if (lm > 0.001) { ctx.globalAlpha = lm; ctx.drawImage(lifted, PAD_X, top, iw, DISPLAY_H); ctx.globalAlpha = 1; }       // with fill light, on light pages
   ctx.globalCompositeOperation = 'source-atop';
+  if (lm > 0.001) {                                           // sky light from the upper left: a soft rim on her head, ears, back and shoulder
+    const rg = ctx.createRadialGradient(PAD_X + iw * 0.22, top + DISPLAY_H * 0.1, 2, PAD_X + iw * 0.22, top + DISPLAY_H * 0.1, DISPLAY_H * 0.62);
+    rg.addColorStop(0, `rgba(236,244,255,${(0.13 * lm).toFixed(3)})`); rg.addColorStop(1, 'rgba(236,244,255,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    const tg = ctx.createLinearGradient(0, top, 0, top + DISPLAY_H * 0.42);                       // and from above
+    tg.addColorStop(0, `rgba(240,246,255,${(0.06 * lm).toFixed(3)})`); tg.addColorStop(1, 'rgba(240,246,255,0)');
+    ctx.fillStyle = tg; ctx.fillRect(0, top, W, DISPLAY_H * 0.42);
+  }
+  // darken the lowest part of her body, so the paws sink into the floor instead of hovering above it
   const og = ctx.createLinearGradient(0, floor - 26, 0, floor + 4);
-  og.addColorStop(0, 'rgba(0,0,0,0)'); og.addColorStop(1, `rgba(0,0,0,${(0.7 - 0.15 * dm).toFixed(3)})`);
+  og.addColorStop(0, 'rgba(0,0,0,0)'); og.addColorStop(1, `rgba(0,0,0,${(0.7 - 0.15 * dm - 0.18 * lm).toFixed(3)})`);
   ctx.fillStyle = og; ctx.fillRect(0, floor - 26, W, 36);
   ctx.globalCompositeOperation = 'source-over';
   collar(t, floor);
   // 3) tight contact shadow drawn over the paws' bottom edge: this is what makes her sit on the ground
-  pool(cx, floor + 1, iw * 0.5, 4.5, Math.min(0.97, 0.85 * (1.15 - 0.15 * dm)));
-  pool(cx - iw * 0.22, floor + 1, iw * 0.3, 4, 0.65 * (1.2 - 0.2 * dm));
-  pool(cx + iw * 0.3, floor + 1, iw * 0.2, 3.5, 0.5 * (1.2 - 0.2 * dm));
+  pool(cx, floor + 1, iw * 0.5, 4.5, Math.min(0.95, 0.8 * (1.1 - 0.1 * dm)), sc);
+  pool(cx - iw * 0.22, floor + 1, iw * 0.3, 4, 0.6 * (1.15 - 0.15 * dm), sc);
+  pool(cx + iw * 0.3, floor + 1, iw * 0.2, 3.5, 0.45 * (1.15 - 0.15 * dm), sc);
   // blink: a feathered, fur-coloured eyelid closes over each eye
   const b = (t + 1.5) % 5.6;
   let closed = 0;
